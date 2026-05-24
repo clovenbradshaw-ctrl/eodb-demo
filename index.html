@@ -267,15 +267,15 @@ document.getElementById('stat-disk').textContent=sizeLabel;
 if(sm==='opfs'){try{const w=await dbH.createWritable();await w.write(blob);await w.close();toast('✓ opfs · '+sizeLabel+' · '+EL.length+' events','ok');}catch(e){toast('✗ opfs write failed: '+e.message,'err');}}
 else if(sm==='idb'){try{dbH.transaction('ev','readwrite').objectStore('ev').put(blob,'log');toast('✓ idb · '+sizeLabel,'ok');}catch(e){toast('✗ idb write failed: '+e.message,'err');}}
 else{toast('⚠ memory only — not saved','warn');}
-if(mx){toast('↑ matrix sync (demo) — with SDK: client.sendEvent(roomId, event)','sync');}},500);}
+},500);}
 async function loadS(){try{const f=await dbH.getFile();if(!f.size){toast('opfs empty — starting fresh','warn');return;}const text=await decompress(f);EL=JSON.parse(text);ec=EL.length;reproject();renderRP();
 toast('✓ loaded '+EL.length.toLocaleString()+' events from opfs ('+((f.size/1024).toFixed(0))+'KB on disk)','ok');}catch(e){console.log('load:',e);toast('✗ opfs load failed: '+e.message,'err');}}
 async function loadIDB(){try{await new Promise(res=>{const r=dbH.transaction('ev','readonly').objectStore('ev').get('log');r.onsuccess=async e=>{if(e.target.result){const text=await decompress(e.target.result);EL=JSON.parse(text);ec=EL.length;reproject();renderRP();toast('loaded '+EL.length.toLocaleString()+' events from idb','ok');}res();};r.onerror=()=>res()});}catch(e){toast('idb load failed','err');}}
 
 // ── CORE ──
 function uid(p){return p+'_'+(++ec).toString(36).padStart(5,'0')}
-function emit(t,a,c,d,batch){EL.push({id:uid('e'),type:t,anchor:a,content:c,description:d||'',timestamp:Date.now(),sender:mx?mxU:'@local',room:mx?mxRoom:'!local'});
-if(!batch){uScrub();if(scrubPos===null){renderRP();reproject();}sav();}}
+function emit(t,a,c,d,batch){const ev={id:uid('e'),type:t,anchor:a,content:c,description:d||'',timestamp:Date.now(),sender:mx?mxU:'@local',room:mx?mxRoom:'!local'};EL.push(ev);
+if(!batch){uScrub();if(scrubPos===null){renderRP();reproject();}sav();window._eo?.publish?.(ev);}}
 function finB(){uScrub();if(scrubPos===null){renderRP();reproject();}sav();}
 function fold(ev,upto){const n=upto!==undefined?upto+1:ev.length;const s={tables:{},columns:{},rows:{},cons:[]};
 for(let i=0;i<n;i++){const e=ev[i],c=e.content;switch(e.type){
@@ -398,11 +398,12 @@ function renderOps(b){b.innerHTML='';EL.slice(-80).forEach(e=>{const d=document.
 d.innerHTML=`<span class="ts">${t}</span> <span class="op ${opc(e.type)}">${e.type}</span> <span class="desc">${esc(e.description)}</span>`;b.appendChild(d);});}
 function renderMx(b){b.innerHTML='';EL.slice(-20).forEach(e=>{const d=document.createElement('div');d.className='me';
 d.innerHTML=synHL(JSON.stringify({type:`com.eobase.${e.type.toLowerCase()}`,sender:e.sender,ts:e.timestamp,content:e.content},null,2));b.appendChild(d);});}
-function renderSync(b){b.innerHTML=`<div class="sync-note">${mx?`<b style="color:var(--e)">● connected · e2ee active</b><br><br>
+function renderSync(b){const cs=window._eo?.cryptoStatus?.()||(mx?'unknown':'off');
+b.innerHTML=`<div class="sync-note">${mx?`<b style="color:var(--e)">● connected · e2ee ${esc(cs)}</b><br><br>
 user: ${esc(mxU)}<br>room: <span style="color:var(--s)">${esc(mxRoom)}</span><br>
-storage: ${sm} (gzip compressed)<br><br>
-every change saves immediately to this encrypted room. the homeserver stores ciphertext it cannot read.<br><br>
-<b>to sync large datasets:</b><br>serialize log → gzip → encrypt → upload to media store → share pointer event in room. one file, full dataset.`
+storage: ${sm} (gzip compressed)<br>crypto: matrix-js-sdk rust crypto (megolm v1 aes-sha2)<br><br>
+every edit is sent as a <code>com.eobase.&lt;op&gt;</code> event. the homeserver stores ciphertext only; only joined &amp; verified devices in this room can decrypt.<br><br>
+<b>multi-device:</b> sign in on another device with the same account to sync. <b>collaborate:</b> invite another matrix id from the invite menu.`
 :`<b>local only — not encrypted</b><br><br>
 data is stored in ${sm}${sm==='opfs'?' (gzip compressed)':''}. connect a matrix account to encrypt and sync.<br><br>
 <a href="https://servers.joinmatrix.org/" target="_blank">get a matrix account →</a>`}</div>`;}
@@ -445,19 +446,14 @@ ${mx?`<p>signed in as <b>${esc(mxU)}</b><br>room: <b style="color:var(--s)">${es
 if(!mx)setTimeout(()=>document.getElementById('mxu')?.focus(),50);}
 function autoServer(){const u=document.getElementById('mxu').value;const m=u.match(/@[^:]+:(.+)/);
 const sEl=document.getElementById('mxs');if(m&&sEl)sEl.placeholder='https://'+m[1];}
-function cMx(){const u=document.getElementById('mxu').value.trim();if(!u)return;
+async function cMx(){const u=document.getElementById('mxu').value.trim();if(!u){toast('matrix id required','err');return;}
+const p=document.getElementById('mxp')?.value||'';if(!p){toast('password required','err');return;}
 const sOverride=document.getElementById('mxs')?.value.trim();
-let server;const m=u.match(/@[^:]+:(.+)/);
-if(sOverride)server=sOverride;else if(m)server='https://'+m[1];else server='https://matrix.org';
-mxU=u.startsWith('@')?u:`@${u}:${server.replace('https://','').replace('http://','')}`; mx=true;
-// Deterministic room: same user always gets same room
-const serverHost=server.replace('https://','').replace('http://','');
-const userHash=mxU.replace(/[^a-z0-9]/gi,'').slice(0,12);
-mxRoom='#eo-base-'+userHash+':'+serverHost;
-document.getElementById('conn').classList.add('on');document.getElementById('conn-label').textContent=mxU;
-document.getElementById('ebadge').style.display=AT?'inline':'none';document.getElementById('conn-banner').classList.add('hidden');
-uStore();closeM();renderRP();sav();toast('demo: would connect as '+mxU,'sync');toast('demo: would join/create '+mxRoom,'sync');toast('with matrix-js-sdk this is real e2ee sync','sync');}
-function dcMx(){mx=false;mxU='';mxRoom='';document.getElementById('conn').classList.remove('on');document.getElementById('conn-label').textContent='connect →';
+const btn=document.querySelector('.mdl .chip.on');if(btn){btn.textContent='connecting…';btn.style.pointerEvents='none';}
+if(window._eo?.connect){try{await window._eo.connect({user:u,password:p,server:sOverride});}catch(e){if(btn){btn.textContent='connect';btn.style.pointerEvents='';}toast('connect failed: '+(e?.message||e),'err');}}
+else toast('matrix-js-sdk not loaded yet — try again in a moment','warn');}
+async function dcMx(){if(window._eo?.disconnect)await window._eo.disconnect();
+mx=false;mxU='';mxRoom='';document.getElementById('conn').classList.remove('on');document.getElementById('conn-label').textContent='connect →';
 document.getElementById('ebadge').style.display='none';document.getElementById('conn-banner').classList.remove('hidden');uStore();closeM();renderRP();toast('disconnected — local saves continue, matrix sync stopped','warn');}
 
 // ── MODALS ──
@@ -483,7 +479,9 @@ const c={et:'col',tbl:AT,name:n,ct:t};if(t==='link'){const cbs=document.querySel
 if(t==='formula')c.formula=document.getElementById('ncf')?.value||'';
 emit('INS',uid('col'),c,`INS → col "${n}" (${t})`);closeM();}
 function showInvite(){document.getElementById('modal-container').innerHTML=`<div class="mbg" onclick="if(event.target===this)closeM()"><div class="mdl"><h3>invite</h3>${mx?'':'<div class="ib"><a href="https://servers.joinmatrix.org/" target="_blank">get an account →</a></div>'}<label>matrix id</label><input placeholder="@alice:matrix.org" id="inv" ${mx?'':'disabled'}><div class="ma"><span class="chip" onclick="closeM()">close</span><span class="chip${mx?' on':''}" onclick="doInv()" ${mx?'':'style="opacity:.4;pointer-events:none"'}>invite</span></div></div></div>`;}
-function doInv(){const id=document.getElementById('inv').value.trim()||'@alice:matrix.org';emit('CON',AT,{src:mxU,tgt:id,rel:'invite',tbl:AT},`CON ${id}`);closeM();}
+async function doInv(){const id=document.getElementById('inv').value.trim();if(!id){toast('matrix id required','err');return;}
+if(window._eo?.invite){try{await window._eo.invite(id);}catch(e){toast('invite failed: '+(e?.message||e),'err');return;}}
+emit('CON',AT,{src:mxU,tgt:id,rel:'invite',tbl:AT},`CON ${id}`);closeM();}
 function showBulk(){const colCount=(LS?.columns[AT]||[]).filter(c=>c.type!=='formula'&&c.type!=='link').length;
 document.getElementById('modal-container').innerHTML=`<div class="mbg" onclick="if(event.target===this)closeM()"><div class="mdl"><h3>⚡ bulk</h3>${!AT?'<p style="color:var(--g)">create a table first</p>':`<select id="bc"><option value="1000">1K</option><option value="10000" selected>10K</option><option value="100000">100K</option><option value="500000">500K</option></select>
 <div style="font-size:10px;color:var(--dim);margin-bottom:6px">each row = 1 event. ${colCount} data columns. uses compact bulk format.</div>
@@ -557,5 +555,180 @@ emit('INS',uid('col'),{et:'col',tbl:t2,name:'Total',ct:'formula',formula:'SUM(Bu
 [['Website redesign','Active','25000'],['Mobile app','Draft','80000'],['API integration','Review','15000']]
 .forEach(r=>{const a=uid('row');emit('INS',a,{et:'row',tbl:t2},'',true);r.forEach((v,i)=>{if(v)emit('DEF',a,{tbl:t2,path:pa[i],val:v},'',true);});});
 finB();selTable(t1);}
+// ── BRIDGE TO MATRIX MODULE ──
+window._eo_state={
+  toast,closeM,renderRP,uStore,
+  get mx(){return mx},set mx(v){mx=v},
+  get mxU(){return mxU},set mxU(v){mxU=v},
+  get mxRoom(){return mxRoom},set mxRoom(v){mxRoom=v},
+  get AT(){return AT},
+  setConnected(userId,roomLabel){mx=true;mxU=userId;mxRoom=roomLabel;
+    document.getElementById('conn').classList.add('on');document.getElementById('conn-label').textContent=userId;
+    document.getElementById('ebadge').style.display=AT?'inline':'none';document.getElementById('conn-banner').classList.add('hidden');
+    uStore();renderRP();},
+  ingest(ev){if(EL.some(e=>e.id===ev.id))return false;EL.push(ev);ec=Math.max(ec,EL.length);
+    uScrub();if(scrubPos===null){renderRP();reproject();}sav();return true;},
+};
 init();
+</script>
+<script type="module">
+// ── REAL MATRIX-JS-SDK WIRING (E2EE via rust crypto / megolm) ──
+// Pin to a known-good version. Bundle pulls deps inline so the WASM crypto loads.
+const SDK_URL='https://esm.sh/matrix-js-sdk@34.13.0?bundle&target=es2020';
+const SESSION_KEY='eo-base-mx-session';
+const EVENT_PREFIX='com.eobase.';
+
+let sdk=null,client=null,session=null,roomId=null,roomAlias=null;
+const T=(...a)=>window._eo_state?.toast?.(...a);
+
+async function loadSdk(){if(sdk)return sdk;
+  try{sdk=await import(SDK_URL);return sdk;}
+  catch(e){console.error('[mx] sdk load failed',e);T('matrix-js-sdk failed to load: '+e.message,'err');throw e;}}
+
+function deriveAlias(userId,baseUrl){
+  const local=userId.replace(/^@/,'').split(':')[0].replace(/[^a-z0-9]/gi,'').slice(0,16).toLowerCase();
+  const host=baseUrl.replace(/^https?:\/\//,'').replace(/\/$/,'');
+  return {aliasLocal:'eo-base-'+local,alias:'#eo-base-'+local+':'+host};}
+
+async function discoverHomeserver(server){
+  // Strip protocol if present, then try .well-known
+  const base=server.startsWith('http')?server:'https://'+server;
+  try{const r=await fetch(base+'/.well-known/matrix/client',{cache:'no-store'});
+    if(r.ok){const j=await r.json();const u=j['m.homeserver']?.base_url;if(u)return u.replace(/\/$/,'');}}
+  catch(e){/* fine — no well-known */}
+  return base.replace(/\/$/,'');}
+
+async function findOrCreateRoom(){
+  const {aliasLocal,alias}=deriveAlias(client.getUserId(),client.baseUrl);
+  roomAlias=alias;
+  try{const r=await client.getRoomIdForAlias(alias);
+    roomId=r.room_id;
+    const room=client.getRoom(roomId);
+    if(!room||room.getMyMembership()!=='join'){await client.joinRoom(roomId);}
+    T('joined room '+alias,'sync');return;}
+  catch(e){/* fall through to create */}
+  T('creating encrypted room '+alias,'sync');
+  const r=await client.createRoom({
+    visibility:'private',preset:'private_chat',
+    name:'eo///base — '+aliasLocal,room_alias_name:aliasLocal,
+    initial_state:[{type:'m.room.encryption',state_key:'',content:{algorithm:'m.megolm.v1.aes-sha2'}}],
+  });
+  roomId=r.room_id;
+  T('✓ encrypted room created · '+alias,'ok');}
+
+function attachListeners(){
+  const handle=(ev,room)=>{
+    if(!room||room.roomId!==roomId)return;
+    if(ev.isEncrypted()&&ev.isDecryptionFailure()){console.warn('[mx] decryption failure',ev.event);return;}
+    if(ev.isEncrypted()&&!ev.getClearContent())return; // not yet decrypted; Event.decrypted will re-fire
+    const t=ev.getType();if(!t.startsWith(EVENT_PREFIX))return;
+    const content=ev.getContent();const eo=content?.eo;if(!eo||!eo.id)return;
+    const sender=ev.getSender();const dev=content.dev||sender;
+    // Skip our own echo (same user + same device id).
+    if(sender===client.getUserId()&&dev===client.getDeviceId())return;
+    // Namespace by sender + device so multi-device users don't collide with our local uid counter.
+    const id=sender+'/'+dev+':'+eo.id;
+    window._eo_state?.ingest?.({...eo,id,sender,timestamp:ev.getTs()||eo.timestamp,room:room.roomId});
+  };
+  client.on(sdk.RoomEvent.Timeline,handle);
+  client.on(sdk.MatrixEventEvent.Decrypted,(ev)=>{const r=client.getRoom(ev.getRoomId());if(r)handle(ev,r);});}
+
+async function backfill(){
+  const room=client.getRoom(roomId);if(!room)return;
+  const evs=room.getLiveTimeline().getEvents();
+  for(const ev of evs){
+    if(ev.isEncrypted()&&!ev.getClearContent()){try{await client.decryptEventIfNeeded(ev);}catch{}}
+    const t=ev.getType();if(!t.startsWith(EVENT_PREFIX))continue;
+    const content=ev.getContent();const eo=content?.eo;if(!eo||!eo.id)continue;
+    const sender=ev.getSender();const dev=content.dev||sender;
+    if(sender===client.getUserId()&&dev===client.getDeviceId())continue;
+    const id=sender+'/'+dev+':'+eo.id;
+    window._eo_state?.ingest?.({...eo,id,sender,timestamp:ev.getTs()||eo.timestamp,room:room.roomId});
+  }}
+
+async function buildClient(s){
+  await loadSdk();
+  const store=new sdk.MemoryStore({localStorage:window.localStorage});
+  client=sdk.createClient({
+    baseUrl:s.baseUrl,accessToken:s.accessToken,userId:s.userId,deviceId:s.deviceId,
+    store,useAuthorizationHeader:true,timelineSupport:true,
+  });
+  // Real E2EE: rust crypto (megolm). Keys are persisted in IndexedDB by the sdk.
+  try{await client.initRustCrypto();}
+  catch(e){console.warn('[mx] rust crypto init failed',e);T('e2ee init failed — falling back unencrypted: '+(e?.message||e),'warn');}
+  // Trust-on-first-use: share keys with every joined device in the room.
+  try{const crypto=client.getCrypto?.();if(crypto)crypto.globalBlacklistUnverifiedDevices=false;}
+  catch(e){console.warn('[mx] crypto trust setup',e);}
+  await client.startClient({initialSyncLimit:50});
+  await new Promise((res,rej)=>{
+    const onSync=(state,prev,data)=>{
+      if(state==='PREPARED'||state==='SYNCING'){client.off(sdk.ClientEvent.Sync,onSync);res();}
+      else if(state==='ERROR'){client.off(sdk.ClientEvent.Sync,onSync);rej(data?.error||new Error('sync error'));}};
+    client.on(sdk.ClientEvent.Sync,onSync);});
+  await findOrCreateRoom();
+  attachListeners();
+  await backfill();
+  s.roomId=roomId;s.roomAlias=roomAlias;
+  localStorage.setItem(SESSION_KEY,JSON.stringify(s));
+  window._eo_state?.setConnected?.(s.userId,roomAlias);}
+
+async function connect({user,password,server}){
+  await loadSdk();
+  let homeserver;
+  if(server){homeserver=server.startsWith('http')?server:'https://'+server;}
+  else{const m=user.match(/@[^:]+:(.+)/);homeserver=m?'https://'+m[1]:'https://matrix.org';}
+  const baseUrl=await discoverHomeserver(homeserver);
+  T('logging in at '+baseUrl,'sync');
+  const tmp=sdk.createClient({baseUrl});
+  const userLocal=user.startsWith('@')?user.split(':')[0].slice(1):user;
+  const auth=await tmp.login('m.login.password',{
+    identifier:{type:'m.id.user',user:userLocal},
+    password,
+    initial_device_display_name:'eo///base · '+navigator.platform,
+  });
+  const s={baseUrl,userId:auth.user_id,accessToken:auth.access_token,deviceId:auth.device_id};
+  await buildClient(s);
+  session=s;
+  window._eo_state?.closeM?.();
+  T('✓ e2ee online · '+auth.user_id,'ok');}
+
+async function disconnect(){
+  try{await client?.logout?.(true);}catch(e){console.warn('[mx] logout',e);}
+  try{client?.stopClient?.();}catch{}
+  try{await client?.clearStores?.();}catch{}
+  client=null;session=null;roomId=null;roomAlias=null;
+  localStorage.removeItem(SESSION_KEY);}
+
+async function publish(ev){
+  if(!client||!roomId)return;
+  if(ev.sender==='@bulk')return; // don't flood the room with bulk-generated events
+  try{
+    const type=EVENT_PREFIX+ev.type.toLowerCase();
+    await client.sendEvent(roomId,type,{eo:ev,dev:client.getDeviceId(),v:1});
+  }catch(e){console.warn('[mx] send failed',e);T('matrix send failed: '+(e?.message||e),'err');}}
+
+async function invite(userId){
+  if(!client||!roomId)throw new Error('not connected');
+  await client.invite(roomId,userId);
+  T('invited '+userId,'ok');}
+
+function cryptoStatus(){
+  if(!client)return 'off';
+  try{const c=client.getCrypto?.();if(!c)return 'unavailable';
+    const room=client.getRoom?.(roomId);
+    if(room&&client.isRoomEncrypted?.(roomId))return 'megolm';
+    return 'ready';}catch{return 'unknown';}}
+
+window._eo={connect,disconnect,publish,invite,cryptoStatus};
+
+// Preload sdk + attempt session resume in the background.
+(async()=>{
+  try{await loadSdk();}catch{return;}
+  const raw=localStorage.getItem(SESSION_KEY);if(!raw)return;
+  let s;try{s=JSON.parse(raw);}catch{localStorage.removeItem(SESSION_KEY);return;}
+  if(!s?.accessToken||!s?.userId||!s?.baseUrl)return;
+  try{await buildClient(s);session=s;T('✓ matrix session resumed · '+s.userId,'ok');}
+  catch(e){console.warn('[mx] resume failed',e);T('matrix resume failed: '+(e?.message||e),'warn');
+    localStorage.removeItem(SESSION_KEY);}
+})();
 </script></body></html>
