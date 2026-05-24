@@ -577,11 +577,12 @@ init();
 </script>
 <script type="module">
 // ── REAL MATRIX-JS-SDK WIRING (E2EE via rust crypto / megolm) ──
-// matrix-js-sdk via esm.sh. Newer majors (v37+) ship with a working
-// matrix-events-sdk dep — older v34 was crashing because the M_POLL_START
-// symbol it imports doesn't exist in any published matrix-events-sdk
-// (npm only has 0.0.1 and 0.0.1-beta.X, neither has the symbol).
-const SDK_URL='https://esm.sh/matrix-js-sdk@37?bundle&target=es2020';
+// matrix-js-sdk via jsdelivr's /+esm. esm.sh's transformation of v34/v37
+// couldn't resolve the transitive matrix-events-sdk version that exports
+// M_POLL_START — jsdelivr uses a different bundler that tends to inline
+// peer deps from the package's own lockfile, matching what works in
+// EODB2 (vite + npm install matrix-js-sdk@34.13.0 + matrix-sdk-crypto-wasm).
+const SDK_URL='https://cdn.jsdelivr.net/npm/matrix-js-sdk@34.13.0/+esm';
 const SESSION_KEY='eo-base-mx-session';
 const EVENT_PREFIX='com.eobase.';
 
@@ -668,7 +669,8 @@ async function buildClient(s){
   });
   // Real E2EE: rust crypto (megolm). Keys are persisted in IndexedDB by the sdk.
   cryptoBroken=false;
-  try{await client.initRustCrypto();}
+  // useIndexedDB:true matches what EODB2 uses successfully with the same SDK version.
+  try{await client.initRustCrypto({useIndexedDB:true});}
   catch(e){console.error('[mx] rust crypto init failed',e);cryptoBroken=true;
     T('✗ E2EE init failed — sends to the encrypted room will be REFUSED by the sdk: '+(e?.message||e),'err');}
   // Trust-on-first-use: share keys with every joined device in the room.
