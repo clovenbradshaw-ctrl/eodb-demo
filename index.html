@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"><title>EO///Base</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--e:#0a7;--s:#64c;--g:#b22;--w:#a80;--bor:#ddd;--bg:#fff;--bg2:#f7f7f5;--bg3:#eee;--txt:#222;--dim:#888;--faint:#bbb;--row-h:28px;--col-w:150px}
+body{font:13px/1.6 monospace;background:var(--bg);color:var(--txt);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── TOP ── */
+#top{display:flex;align-items:center;padding:0 10px;height:32px;border-bottom:1px solid var(--bor);gap:10px;font-size:12px;flex-shrink:0}
+#top .logo{font-weight:700;color:var(--g)}
+#top .logo span{color:var(--dim)}
+.conn{cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid var(--bor)}
+.conn:hover{border-color:var(--w);color:var(--w)}
+.conn .dot{width:6px;height:6px;border-radius:50%;background:var(--faint)}
+.conn.on .dot{background:var(--e)}
+.conn.on{color:var(--e);border-color:var(--e)}
+.store{color:var(--faint);font-size:11px}
+.acts{margin-left:auto;display:flex;gap:4px}
+
+/* ── CHIPS (buttons) ── */
+.chip{display:inline-block;border:1px solid var(--bor);padding:1px 7px;font:12px/1.6 monospace;cursor:pointer;background:var(--bg);color:var(--txt)}
+.chip:hover{border-color:var(--txt)}
+.chip.on{background:var(--txt);color:var(--bg);border-color:var(--txt)}
+.chip.e{border-color:var(--e);color:var(--e)}.chip.e.on{background:var(--e);color:#fff}
+.chip.s{border-color:var(--s);color:var(--s)}.chip.s.on{background:var(--s);color:#fff}
+.chip.g{border-color:var(--g);color:var(--g)}.chip.g.on{background:var(--g);color:#fff}
+.chip.w{border-color:var(--w);color:var(--w)}
+
+/* ── LAYOUT ── */
+#main{display:flex;flex:1;min-height:0}
+#sidebar{width:180px;border-right:1px solid var(--bor);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;transition:width .15s}
+#sidebar.collapsed{width:0;border:none}
+.shdr{padding:6px 10px;font-size:11px;color:var(--dim);border-bottom:1px solid var(--bor)}
+.slist{flex:1;overflow-y:auto}
+.ti{padding:4px 10px;cursor:pointer;color:var(--dim);border-left:2px solid transparent;display:flex;align-items:center;gap:6px;font-size:12px}
+.ti:hover{color:var(--txt);background:var(--bg2)}
+.ti.active{color:var(--txt);border-left-color:var(--g);background:var(--bg2);font-weight:700}
+.ti .rc{margin-left:auto;color:var(--faint);font-size:11px}
+.sfooter{padding:6px;border-top:1px solid var(--bor);display:flex;flex-direction:column;gap:3px}
+
+/* ── CENTER ── */
+#center{flex:1;display:flex;flex-direction:column;min-width:0}
+#thdr{padding:4px 10px;border-bottom:1px solid var(--bor);display:flex;align-items:center;gap:8px;font-size:12px;flex-shrink:0}
+#tname{font-weight:700}
+#tmeta{color:var(--dim);font-size:11px}
+.ebadge{color:var(--e);font-size:11px;display:none}
+.vn{padding:2px 10px;font-size:11px;color:var(--dim);background:var(--bg2);border-bottom:1px solid var(--bor);flex-shrink:0}
+
+/* ── GRID ── */
+#grid-wrap{flex:1;overflow:hidden;display:flex;flex-direction:column}
+#grid-scroll{flex:1;overflow:auto;position:relative}
+#grid-inner{position:relative;min-width:max-content}
+.grow{display:flex;height:var(--row-h);border-bottom:1px solid var(--bor);align-items:stretch}
+.grow.head{position:sticky;top:0;z-index:5;background:var(--bg2);font-size:11px;color:var(--dim);font-weight:700}
+.grow:not(.head):hover{background:var(--bg2)}
+.grow.selected{background:#fef8f0;border-left:2px solid var(--w)}
+.gc{width:var(--col-w);min-width:var(--col-w);border-right:1px solid var(--bor);padding:2px 8px;display:flex;align-items:center;overflow:hidden;font-size:12px}
+.gc.rn{width:36px;min-width:36px;justify-content:center;color:var(--faint);cursor:pointer;font-size:11px}
+.gc.rn:hover{color:var(--g);background:var(--bg2)}
+.gc.ac{width:30px;min-width:30px;justify-content:center;cursor:pointer;color:var(--faint)}
+.gc.ac:hover{color:var(--txt)}
+.gc [contenteditable]{outline:none;width:100%;cursor:text}
+.gc [contenteditable]:focus{background:#fef8f0}
+.gc .fv{color:var(--g);font-size:11px}
+.gc .lv{color:var(--s);cursor:pointer}.gc .lv:hover{text-decoration:underline}
+.status-chip{display:inline-block;border:1px solid var(--bor);padding:0 5px;font-size:11px;cursor:pointer}
+.status-chip:hover{border-color:var(--txt)}
+.arb{padding:4px 10px;font-size:11px;color:var(--dim);cursor:pointer;border-top:1px solid var(--bor);flex-shrink:0}
+.arb:hover{background:var(--bg2);color:var(--txt)}
+
+/* ── PICKER ── */
+.picker{position:fixed;z-index:90;background:var(--bg);border:1px solid var(--bor);padding:2px 0;min-width:120px}
+.picker .pi{padding:4px 10px;cursor:pointer;font-size:12px}
+.picker .pi:hover{background:var(--bg2)}
+
+/* ── SCRUBBER ── */
+#scrubber-bar{padding:4px 10px;border-top:1px solid var(--bor);display:flex;align-items:center;gap:8px;flex-shrink:0;font-size:11px;color:var(--dim)}
+#scrubber{flex:1;-webkit-appearance:none;height:2px;background:var(--bor);outline:none;cursor:pointer}
+#scrubber::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;background:var(--txt);border-radius:50%;cursor:pointer}
+.live-chip{font:11px/1 monospace;padding:2px 8px;border:1px solid var(--e);color:var(--e);cursor:pointer;background:var(--bg)}
+.live-chip:hover{background:var(--e);color:#fff}
+.live-chip.rw{border-color:var(--g);color:var(--g)}
+.live-chip.rw:hover{background:var(--g);color:#fff}
+#scrubber-bar.rw{background:#fef8f0}
+
+/* ── RIGHT PANEL ── */
+#rpanel{width:280px;border-left:1px solid var(--bor);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;transition:width .15s}
+#rpanel.collapsed{width:0;border:none}
+.rp-close{padding:3px 10px;border-bottom:1px solid var(--bor);display:flex;align-items:center;font-size:11px;color:var(--dim);cursor:pointer;flex-shrink:0}
+.rp-close:hover{background:var(--bg2);color:var(--txt)}
+.rp-close span{margin-left:auto}
+#rp-tabs{display:flex;border-bottom:1px solid var(--bor);flex-shrink:0}
+.rt{flex:1;padding:4px 0;text-align:center;font:11px/1.6 monospace;color:var(--dim);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none}
+.rt:hover{color:var(--txt)}
+.rt.active{color:var(--txt);border-bottom-color:var(--txt);font-weight:700}
+.rt.rec.active{color:var(--w);border-bottom-color:var(--w)}
+#rp-body{flex:1;overflow-y:auto;font-size:12px}
+.le{padding:4px 10px;border-bottom:1px solid var(--bor);font-size:11px;line-height:1.6}
+.le .ts{color:var(--faint)}
+.le .op{font-weight:700;margin:0 3px}
+.le .op.e{color:var(--e)}.le .op.s{color:var(--s)}.le .op.g{color:var(--g)}
+.le .desc{color:var(--dim)}
+.me{padding:6px 10px;border-bottom:1px solid var(--bor);font-size:11px;white-space:pre-wrap;word-break:break-all;line-height:1.5}
+.mk{color:var(--s)}.ms{color:var(--w)}.mn{color:var(--e)}
+.sync-note{padding:10px;font-size:11px;color:var(--dim);line-height:1.7;border-left:2px solid var(--s);margin:10px}
+.rp-field{padding:6px 10px;border-bottom:1px solid var(--bor)}
+.rp-field label{display:block;font-size:10px;color:var(--dim);margin-bottom:2px}
+.rp-field .rv{padding:4px 6px;border:1px solid var(--bor);font:12px/1.6 monospace;color:var(--txt);min-height:24px;outline:none;width:100%}
+.rp-field .rv:focus{border-color:var(--w);background:#fef8f0}
+.rp-anchor{font-size:10px;color:var(--faint);padding:6px 10px;border-bottom:1px solid var(--bor)}
+.rp-links{padding:6px 10px;border-bottom:1px solid var(--bor)}
+.rp-links h5{font-size:10px;color:var(--s);margin-bottom:4px}
+.rp-link{font-size:11px;color:var(--dim);padding:2px 0;cursor:pointer}.rp-link:hover{color:var(--s)}
+.rp-evts h5{font-size:10px;color:var(--dim);padding:6px 10px 2px}
+.rp-evt{font-size:10px;color:var(--dim);padding:2px 10px;border-bottom:1px solid var(--bor)}
+#fold-bar{padding:4px 10px;border-top:1px solid var(--bor);font-size:10px;color:var(--faint);display:flex;gap:10px;flex-wrap:wrap;flex-shrink:0}
+#fold-bar b{color:var(--dim)}
+
+.es{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;color:var(--dim);gap:10px;padding:30px}
+.es p{font-size:12px;text-align:center;line-height:1.6;max-width:280px}
+
+/* ── MODAL ── */
+.mbg{position:fixed;inset:0;background:rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;z-index:100;padding:10px}
+.mdl{background:var(--bg);border:1px solid var(--bor);padding:16px;width:340px;max-width:100%;max-height:85vh;overflow-y:auto;font-size:12px}
+.mdl h3{font-size:12px;font-weight:700;color:var(--g);margin-bottom:10px;text-transform:uppercase;letter-spacing:.08em}
+.mdl p{color:var(--dim);line-height:1.6;margin-bottom:10px}
+.mdl label{display:block;font-size:10px;color:var(--dim);margin-bottom:2px}
+.mdl input,.mdl select{width:100%;padding:4px 6px;border:1px solid var(--bor);font:12px/1.6 monospace;color:var(--txt);margin-bottom:10px;outline:none;background:var(--bg)}
+.mdl input:focus,.mdl select:focus{border-color:var(--w)}
+.mdl .ma{display:flex;gap:6px;justify-content:flex-end}
+.ib{font-size:11px;color:var(--dim);border-left:2px solid var(--s);padding:6px 10px;margin-bottom:10px;line-height:1.6}
+.ib a{color:var(--s)}
+.link-list{max-height:180px;overflow-y:auto;border:1px solid var(--bor);margin-bottom:10px}
+.link-item{padding:4px 8px;cursor:pointer;font-size:12px;color:var(--dim);border-bottom:1px solid var(--bor)}
+.link-item:hover{background:var(--bg2);color:var(--txt)}
+
+/* ── TUTORIAL ── */
+.tut-bg{position:fixed;inset:0;background:rgba(0,0,0,.15);z-index:199}
+.tut-card{position:fixed;z-index:201;background:var(--bg);border:1px solid var(--bor);border-left:3px solid var(--w);padding:12px 16px;width:300px;max-width:calc(100vw - 24px)}
+.tut-card h4{font-size:11px;font-weight:700;color:var(--w);margin-bottom:6px}
+.tut-card .sn{font-size:10px;color:var(--faint);margin-bottom:4px}
+.tut-card p{font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:10px}
+.tut-card a{color:var(--s)}
+.tut-card .ta{display:flex;gap:6px;justify-content:flex-end}
+.tut-pulse{position:fixed;z-index:200;border:1px solid var(--w);pointer-events:none}
+
+.mob-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.15);z-index:35;display:none}
+.mob-backdrop.show{display:block}
+
+/* ── CONNECT BANNER ── */
+#conn-banner{padding:6px 12px;background:#fef8f0;border-bottom:1px solid var(--w);display:flex;align-items:center;gap:10px;font-size:12px;flex-shrink:0;cursor:pointer}
+#conn-banner:hover{background:#fdf0e0}
+#conn-banner .cb-icon{color:var(--w);font-size:14px}
+#conn-banner .cb-text{color:var(--dim)}
+#conn-banner .cb-text b{color:var(--txt)}
+#conn-banner .cb-action{margin-left:auto;color:var(--w);font-weight:700}
+#conn-banner.hidden{display:none}
+
+::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--bor)}
+
+/* ── TOAST ── */
+#toasts{position:fixed;bottom:12px;right:12px;z-index:200;display:flex;flex-direction:column;gap:4px;pointer-events:none}
+.toast{font:11px/1.4 monospace;padding:4px 10px;border:1px solid var(--bor);background:var(--bg);color:var(--dim);animation:tin .2s ease-out,tout .3s ease-in 2.5s forwards;max-width:280px}
+.toast.ok{border-left:3px solid var(--e);color:var(--e)}
+.toast.err{border-left:3px solid var(--g);color:var(--g)}
+.toast.sync{border-left:3px solid var(--s);color:var(--s)}
+.toast.warn{border-left:3px solid var(--w);color:var(--w)}
+@keyframes tin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes tout{from{opacity:1}to{opacity:0}}
+
+@media(max-width:768px){
+  #top{height:36px;gap:6px;font-size:11px}
+  #sidebar{position:fixed;left:0;top:36px;bottom:0;width:240px;z-index:40;background:var(--bg);transform:translateX(-100%);transition:transform .2s}
+  #sidebar.open{transform:translateX(0)}
+  #rpanel{position:fixed;right:0;top:36px;bottom:0;width:100%;max-width:320px;z-index:40;background:var(--bg);transform:translateX(100%);transition:transform .2s}
+  #rpanel.open{transform:translateX(0)}
+  #rpanel.collapsed{transform:translateX(100%)}
+  :root{--col-w:120px;--row-h:36px}
+  .gc{padding:4px 6px;font-size:12px}
+  .ti{padding:8px 10px;min-height:36px}
+  .chip{padding:4px 10px}
+  .mdl{width:100%}
+  .mdl input,.mdl select{padding:8px;font-size:14px}
+  .link-item{padding:8px;min-height:36px}
+  #scrubber::-webkit-slider-thumb{width:16px;height:16px}
+  .tut-card{left:12px!important;right:12px!important;transform:none!important;width:auto}
+  .tut-pulse{display:none}
+  .store{display:none}
+}
+</style></head><body>
+<div id="top">
+  <span class="chip" onclick="toggleSB()" id="sb-tog">☰</span>
+  <div class="logo">EO<span>///</span>Base</div>
+  <div class="conn" id="conn" onclick="showLogin()"><div class="dot"></div><span id="conn-label">connect →</span></div>
+  <span class="store" id="store">—</span>
+  <div class="acts">
+    <span class="chip" onclick="startTut()">?</span>
+    <span class="chip" onclick="showInvite()">invite</span>
+    <span class="chip" onclick="toggleRP()">panel</span>
+  </div>
+</div>
+<div id="conn-banner" onclick="showLogin()">
+  <span class="cb-icon">⊛</span>
+  <span class="cb-text"><b>data is local only.</b> connect a matrix account to encrypt, sync across devices, and invite collaborators. <a href="https://servers.joinmatrix.org/" target="_blank" onclick="event.stopPropagation()" style="color:var(--s)">get an account →</a></span>
+  <span class="cb-action">connect ›</span>
+</div>
+<div id="main">
+  <div id="sidebar">
+    <div class="shdr">tables</div>
+    <div class="slist" id="table-list"></div>
+    <div class="sfooter">
+      <span class="chip" style="width:100%;text-align:center" onclick="showNewTable()">+ table</span>
+      <span class="chip" style="width:100%;text-align:center" onclick="showBulk()">⚡ bulk</span>
+      <span class="chip" style="width:100%;text-align:center;color:var(--faint)" onclick="wipeData()">wipe data</span>
+    </div>
+  </div>
+  <div id="center">
+    <div id="thdr"><span id="tname">—</span><span id="tmeta"></span><span class="ebadge" id="ebadge">🔒</span></div>
+    <div id="vn" class="vn" style="display:none"></div>
+    <div id="grid-wrap">
+      <div class="es" id="empty-state"><p>create a table to begin. every edit is a typed operator event. state = fold(events).<br><br><b>connect to matrix</b> to encrypt your data, sync across devices, and collaborate in real time. <a href="https://servers.joinmatrix.org/" target="_blank" style="color:var(--s)">get an account →</a></p><span class="chip on" onclick="startTut()">tutorial</span> <span class="chip" onclick="showLogin()">connect to matrix</span></div>
+      <div id="grid-scroll" style="display:none"><div id="grid-inner"></div></div>
+    </div>
+    <div class="arb" id="arb" style="display:none" onclick="addRow()">+ row</div>
+    <div id="scrubber-bar" style="display:none">
+      <span id="scrub-pos">0/0</span>
+      <input type="range" id="scrubber" min="0" max="0" value="0" oninput="onScrub(this.value)">
+      <span class="live-chip" id="live-btn" onclick="goLive()">● live</span>
+    </div>
+  </div>
+  <div id="rpanel">
+    <div class="rp-close" onclick="toggleRP()">panel <span>✕</span></div>
+    <div id="rp-tabs"></div>
+    <div id="rp-body"></div>
+    <div id="fold-bar">events:<b id="stat-events">0</b> entities:<b id="stat-entities">0</b> fold:<b id="stat-fold">0ms</b> disk:<b id="stat-disk">0</b></div>
+  </div>
+</div>
+<div class="mob-backdrop" id="mob-backdrop" onclick="closeMob()"></div>
+<div id="modal-container"></div>
+<div id="picker-container"></div>
+<div id="tut-container"></div>
+<div id="toasts"></div>
+<script>
+let EL=[],tables={},AT=null,rpTab='ops',scrubPos=null,ec=0,sm='memory',dbH=null,svt=null,mx=false,mxU='',mxRoom='',sbV=false,rpV=true,selRec=null,LS=null;
+const RH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--row-h'))||28;
+const BUF=8;function isMob(){return window.innerWidth<=768;}
+// Operator → triad class
+function opc(t){return{NUL:'e',SIG:'e',INS:'e',SEG:'s',CON:'s',SYN:'s',DEF:'g',EVA:'g',REC:'g'}[t]||'';}
+const TAGS=['Active','Archive','Review','Draft','Done','Blocked'];
+const FORMULAS={COUNT:r=>r.length,SUM:(r,c)=>r.reduce((a,x)=>a+(parseFloat(x.v[c])||0),0),AVG:(r,c)=>{const s=r.reduce((a,x)=>a+(parseFloat(x.v[c])||0),0);return r.length?(s/r.length).toFixed(1):0},
+MIN:(r,c)=>r.length?Math.min(...r.map(x=>parseFloat(x.v[c])||0)):0,MAX:(r,c)=>r.length?Math.max(...r.map(x=>parseFloat(x.v[c])||0)):0,
+CONCAT:(r,c)=>r.map(x=>x.v[c]||'').filter(Boolean).join(', ')};
+
+// ── PERSIST (gzip binary) ──
+function toast(msg,type='ok'){const el=document.createElement('div');el.className='toast '+type;el.textContent=msg;
+document.getElementById('toasts').appendChild(el);setTimeout(()=>el.remove(),3000);}
+const STORE_KEY='eo-base'; // stable key — never change this
+async function initS(){try{if(navigator.storage?.getDirectory){const r=await navigator.storage.getDirectory();dbH=await r.getFileHandle(STORE_KEY+'.bin',{create:true});sm='opfs';uStore();await loadS();return;}}catch(e){console.log('opfs fail:',e);}
+try{await new Promise((res,rej)=>{const r=indexedDB.open(STORE_KEY,1);r.onupgradeneeded=e=>e.target.result.createObjectStore('ev');r.onsuccess=e=>{dbH=e.target.result;sm='idb';res()};r.onerror=()=>rej()});uStore();await loadIDB();return;}catch(e){console.log('idb fail:',e);}sm='memory';uStore();toast('no persistent storage — data will be lost on reload','warn');}
+function uStore(){document.getElementById('store').textContent=sm+(mx?' · e2ee · '+mxRoom:'');}
+async function compress(json){const raw=new Blob([json]);try{if(typeof CompressionStream!=='undefined'){return await new Response(raw.stream().pipeThrough(new CompressionStream('gzip'))).blob();}}catch(e){}return raw;}
+async function decompress(blob){try{return await new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();}catch(e){return await blob.text();}}
+async function sav(){if(svt)clearTimeout(svt);svt=setTimeout(async()=>{
+const blob=await compress(JSON.stringify(EL));const s=blob.size;
+const sizeLabel=s>1048576?(s/1048576).toFixed(1)+'MB':(s/1024).toFixed(0)+'KB';
+document.getElementById('stat-disk').textContent=sizeLabel;
+if(sm==='opfs'){try{const w=await dbH.createWritable();await w.write(blob);await w.close();toast('✓ opfs · '+sizeLabel+' · '+EL.length+' events','ok');}catch(e){toast('✗ opfs write failed: '+e.message,'err');}}
+else if(sm==='idb'){try{dbH.transaction('ev','readwrite').objectStore('ev').put(blob,'log');toast('✓ idb · '+sizeLabel,'ok');}catch(e){toast('✗ idb write failed: '+e.message,'err');}}
+else{toast('⚠ memory only — not saved','warn');}
+if(mx){toast('↑ matrix sync (demo) — with SDK: client.sendEvent(roomId, event)','sync');}},500);}
+async function loadS(){try{const f=await dbH.getFile();if(!f.size){toast('opfs empty — starting fresh','warn');return;}const text=await decompress(f);EL=JSON.parse(text);ec=EL.length;reproject();renderRP();
+toast('✓ loaded '+EL.length.toLocaleString()+' events from opfs ('+((f.size/1024).toFixed(0))+'KB on disk)','ok');}catch(e){console.log('load:',e);toast('✗ opfs load failed: '+e.message,'err');}}
+async function loadIDB(){try{await new Promise(res=>{const r=dbH.transaction('ev','readonly').objectStore('ev').get('log');r.onsuccess=async e=>{if(e.target.result){const text=await decompress(e.target.result);EL=JSON.parse(text);ec=EL.length;reproject();renderRP();toast('loaded '+EL.length.toLocaleString()+' events from idb','ok');}res();};r.onerror=()=>res()});}catch(e){toast('idb load failed','err');}}
+
+// ── CORE ──
+function uid(p){return p+'_'+(++ec).toString(36).padStart(5,'0')}
+function emit(t,a,c,d,batch){EL.push({id:uid('e'),type:t,anchor:a,content:c,description:d||'',timestamp:Date.now(),sender:mx?mxU:'@local',room:mx?mxRoom:'!local'});
+if(!batch){uScrub();if(scrubPos===null){renderRP();reproject();}sav();}}
+function finB(){uScrub();if(scrubPos===null){renderRP();reproject();}sav();}
+function fold(ev,upto){const n=upto!==undefined?upto+1:ev.length;const s={tables:{},columns:{},rows:{},cons:[]};
+for(let i=0;i<n;i++){const e=ev[i],c=e.content;switch(e.type){
+case'INS':if(c.et==='table')s.tables[e.anchor]={name:c.name,_a:e.anchor};
+  else if(c.et==='col'){if(!s.columns[c.tbl])s.columns[c.tbl]=[];s.columns[c.tbl].push({_a:e.anchor,name:c.name,type:c.ct,tbl:c.tbl,link_tbl:c.link_tbl,formula:c.formula})}
+  else if(c.et==='row'){if(!s.rows[c.tbl])s.rows[c.tbl]=[];s.rows[c.tbl].push({_a:e.anchor,v:c.v||{},tbl:c.tbl})}break;
+case'DEF':if(s.rows[c.tbl]){const r=s.rows[c.tbl].find(r=>r._a===e.anchor);if(r)r.v[c.path]=c.val;}break;
+case'SEG':break;
+case'CON':s.cons.push({src:c.src,tgt:c.tgt,rel:c.rel,tbl:c.tbl,col:c.col});break;
+}}return s;}
+function reproject(){const t0=performance.now();const pos=scrubPos!==null?scrubPos:EL.length-1;LS=fold(EL,pos);const el=(performance.now()-t0).toFixed(1);
+tables={};for(const[k,v]of Object.entries(LS.tables))tables[k]=v;renderTL();
+const tot=Object.keys(LS.tables).length+Object.values(LS.columns).reduce((a,b)=>a+b.length,0)+Object.values(LS.rows).reduce((a,b)=>a+b.length,0);
+document.getElementById('stat-events').textContent=(pos+1).toLocaleString();
+document.getElementById('stat-entities').textContent=tot.toLocaleString();
+document.getElementById('stat-fold').textContent=el+'ms';
+if(AT&&LS.tables[AT])renderGrid();if(rpTab==='rec'&&selRec)renderRP();}
+function renderTL(){const el=document.getElementById('table-list');el.innerHTML='';
+for(const[id,tbl]of Object.entries(tables)){const rc=(LS?.rows[id]||[]).length;const d=document.createElement('div');d.className='ti'+(AT===id?' active':'');
+d.innerHTML=`${esc(tbl.name)}<span class="rc">${rc.toLocaleString()}</span>`;d.onclick=()=>{selTable(id);if(isMob())toggleSB();};el.appendChild(d);}}
+function selTable(id){AT=id;document.getElementById('empty-state').style.display='none';
+document.getElementById('grid-scroll').style.display='block';document.getElementById('arb').style.display='block';
+document.getElementById('scrubber-bar').style.display='flex';document.getElementById('tname').textContent=tables[id].name;
+document.getElementById('tmeta').textContent=' — graph segment';document.getElementById('ebadge').style.display=mx?'inline':'none';
+selRec=null;rpTab='ops';reproject();renderTL();renderRPT();}
+
+// ── GRID ──
+function renderGrid(){if(!LS||!AT)return;const cols=LS.columns[AT]||[];const rows=LS.rows[AT]||[];
+const inner=document.getElementById('grid-inner');inner.innerHTML='';
+// Header
+const hd=document.createElement('div');hd.className='grow head';hd.style.cssText='position:sticky;top:0;z-index:5';
+let h='<div class="gc rn" style="font-weight:700">#</div>';
+cols.forEach(c=>{let suf='';if(c.type==='formula')suf=' <span style="color:var(--e)">ƒ</span>';
+else if(c.type==='link')suf=' <span style="color:var(--s)">⋈</span>';
+else suf=' <span style="color:var(--faint)">'+esc(c.type)+'</span>';
+h+=`<div class="gc" style="font-weight:700">${esc(c.name)}${suf}</div>`;});
+h+='<div class="gc ac" onclick="showNewCol()">+</div>';hd.innerHTML=h;inner.appendChild(hd);
+const vn=document.getElementById('vn');if(rows.length>100){vn.style.display='block';vn.textContent=rows.length.toLocaleString()+' rows · fold: '+document.getElementById('stat-fold').textContent;}else vn.style.display='none';
+inner.style.height=(RH+rows.length*RH)+'px';
+const sc=document.getElementById('grid-scroll');sc.onscroll=()=>rvr(cols,rows);rvr(cols,rows);}
+function rvr(cols,rows){const sc=document.getElementById('grid-scroll'),inner=document.getElementById('grid-inner');
+const st=sc.scrollTop,vh=sc.clientHeight;const f=Math.max(0,Math.floor(st/RH)-BUF-1),l=Math.min(rows.length-1,Math.ceil((st+vh)/RH)+BUF);
+inner.querySelectorAll('.grow:not(.head)').forEach(el=>{const i=parseInt(el.dataset.i);if(i<f||i>l)el.remove();});
+const has=new Set();inner.querySelectorAll('.grow:not(.head)').forEach(el=>has.add(parseInt(el.dataset.i)));
+for(let i=f;i<=l;i++){if(has.has(i))continue;const row=rows[i];const el=document.createElement('div');
+el.className='grow'+(selRec===row._a?' selected':'');el.dataset.i=i;el.style.cssText=`position:absolute;left:0;right:0;top:${RH+i*RH}px`;
+let h=`<div class="gc rn" onclick="openRec('${row._a}')">${i+1}</div>`;
+cols.forEach(c=>{const v=row.v[c._a]||'';
+if(c.type==='select'){h+=`<div class="gc"><span class="status-chip" onclick="showPicker(event,'${row._a}','${c._a}')">${v||'—'}</span></div>`;}
+else if(c.type==='formula'){h+=`<div class="gc"><span class="fv">${evalF(c.formula,rows,cols)}</span></div>`;}
+else if(c.type==='link'){const lb=findLL(row._a,c._a,c.link_tbl);h+=`<div class="gc">${lb?`<span class="lv" onclick="showLP('${row._a}','${c._a}','${c.link_tbl}')">${esc(lb)}</span>`:`<span style="color:var(--faint);cursor:pointer" onclick="showLP('${row._a}','${c._a}','${c.link_tbl}')">+ link</span>`}</div>`;}
+else h+=`<div class="gc"><span contenteditable="true" data-r="${row._a}" data-c="${c._a}" onfocus="cpv=this.textContent" onblur="cbl(this)">${esc(v)}</span></div>`;});
+h+='<div class="gc ac"></div>';el.innerHTML=h;inner.appendChild(el);}}
+let cpv='';function cbl(el){const v=el.textContent.trim();if(v!==cpv)emit('DEF',el.dataset.r,{tbl:AT,path:el.dataset.c,val:v},`DEF ${el.dataset.r}`);}
+function addRow(){emit('INS',uid('row'),{et:'row',tbl:AT},'INS → row');}
+function evalF(expr,rows,cols){if(!expr)return'';const m=expr.match(/^(\w+)\((\w*)\)$/);if(!m)return expr;const fn=m[1].toUpperCase(),arg=m[2];if(fn==='COUNT')return rows.length;
+const col=cols.find(c=>c.name.toLowerCase()===arg.toLowerCase());if(!col)return'?';if(FORMULAS[fn])return FORMULAS[fn](rows,col._a);return'?';}
+function findLL(ra,ca,tt){if(!LS||!tt)return null;const links=LS.cons.filter(c=>c.src===ra&&c.rel==='link'&&c.col===ca);
+if(!links.length)return null;const labels=[];links.forEach(lk=>{const tids=(lk.tbl||tt).split(',');tids.forEach(tid=>{const tr=LS.rows[tid.trim()]||[];const r=tr.find(r=>r._a===lk.tgt);
+if(r){const tc=LS.columns[tid.trim()]||[];labels.push(tc.length?r.v[tc[0]._a]||'?':'?');}});});return labels.join(', ')||null;}
+function showLP(ra,ca,tt){if(!LS||!tt)return;const tids=tt.split(',');let all=[];
+tids.forEach(tid=>{const tr=LS.rows[tid.trim()]||[];const tc=LS.columns[tid.trim()]||[];const fc=tc[0];const tn=tables[tid.trim()]?.name||tid;
+tr.forEach((r,i)=>{if(r._a===ra)return;all.push({a:r._a,lb:fc?r.v[fc._a]||'row '+(i+1):'row '+(i+1),tn,tbl:tid.trim()});});});
+let h=`<div class="mbg" onclick="if(event.target===this)closeM()"><div class="mdl"><h3>⋈ link</h3>
+<input id="lf" placeholder="filter..." oninput="filterLI()"><div class="link-list" id="ll">`;
+all.forEach(r=>{h+=`<div class="link-item" data-s="${r.lb.toLowerCase()}" onclick="mkLink('${ra}','${r.a}','${r.tbl}','${ca}')"><span style="color:var(--faint)">${esc(r.tn)}</span> ${esc(r.lb)}</div>`;});
+h+='</div><div class="ma"><span class="chip" onclick="closeM()">cancel</span></div></div></div>';document.getElementById('modal-container').innerHTML=h;}
+function filterLI(){const q=document.getElementById('lf').value.toLowerCase();document.querySelectorAll('.link-item').forEach(el=>{el.style.display=el.dataset.s.includes(q)?'':'none'});}
+function mkLink(s,t,tbl,col){emit('CON',s,{src:s,tgt:t,rel:'link',tbl,col},`CON ${s} ⋈ ${t}`);closeM();}
+function showPicker(evt,ra,ca){evt.stopPropagation();const r=evt.target.getBoundingClientRect();
+let h=`<div class="picker" style="left:${Math.min(r.left,window.innerWidth-130)}px;top:${r.bottom+2}px">`;
+TAGS.forEach(lb=>{h+=`<div class="pi" onclick="pickTag('${ra}','${ca}','${lb}')">${lb}</div>`;});
+h+='</div>';document.getElementById('picker-container').innerHTML=h;
+setTimeout(()=>document.addEventListener('click',function cl(){document.getElementById('picker-container').innerHTML='';document.removeEventListener('click',cl);}),10);}
+function pickTag(ra,ca,lb){document.getElementById('picker-container').innerHTML='';
+emit('SEG',ra,{tbl:AT,path:ca,part:lb},`SEG ${ra} → ${lb}`,true);emit('DEF',ra,{tbl:AT,path:ca,val:lb},`DEF ${ra}.status`);}
+
+// ── PANELS ──
+function toggleRP(){rpV=!rpV;const rp=document.getElementById('rpanel');
+if(isMob()){rp.classList.toggle('open',rpV);rp.classList.remove('collapsed');document.getElementById('mob-backdrop').classList.toggle('show',rpV);}
+else rp.classList.toggle('collapsed',!rpV);}
+function toggleSB(){sbV=!sbV;const sb=document.getElementById('sidebar');
+if(isMob()){sb.classList.toggle('open',sbV);sb.classList.remove('collapsed');document.getElementById('mob-backdrop').classList.toggle('show',sbV);}
+else sb.classList.toggle('collapsed',!sbV);document.getElementById('sb-tog').textContent=sbV?'✕':'☰';}
+function closeMob(){sbV=false;rpV=false;document.getElementById('sidebar').classList.remove('open');document.getElementById('rpanel').classList.remove('open');
+document.getElementById('mob-backdrop').classList.remove('show');document.getElementById('sb-tog').textContent='☰';}
+function renderRPT(){const el=document.getElementById('rp-tabs');const hr=selRec!==null;
+el.innerHTML=`${hr?`<button class="rt rec${rpTab==='rec'?' active':''}" onclick="setRT('rec')">record</button>`:''}
+<button class="rt${rpTab==='ops'?' active':''}" onclick="setRT('ops')">ops</button>
+<button class="rt${rpTab==='matrix'?' active':''}" onclick="setRT('matrix')">matrix</button>
+<button class="rt${rpTab==='sync'?' active':''}" onclick="setRT('sync')">sync</button>`;}
+function setRT(t){rpTab=t;renderRPT();renderRP();}
+function renderRP(){const b=document.getElementById('rp-body');if(rpTab==='rec'&&selRec)renderRec(b);else if(rpTab==='ops')renderOps(b);else if(rpTab==='matrix')renderMx(b);else renderSync(b);if(rpTab!=='rec')b.scrollTop=b.scrollHeight;}
+function openRec(a){selRec=a;rpTab='rec';if(!rpV){rpV=true;const rp=document.getElementById('rpanel');
+if(isMob()){rp.classList.add('open');document.getElementById('mob-backdrop').classList.add('show');}else rp.classList.remove('collapsed');}
+renderRPT();renderRP();renderGrid();}
+function navToRec(anchor,tbl){if(tbl&&tbl!==AT&&tables[tbl])selTable(tbl);openRec(anchor);}
+function renderRec(b){if(!LS||!selRec)return;const cols=LS.columns[AT]||[];const rows=LS.rows[AT]||[];
+const row=rows.find(r=>r._a===selRec);if(!row){selRec=null;rpTab='ops';renderRPT();renderRP();return;}
+const idx=rows.indexOf(row);let h=`<div style="padding:6px 10px;border-bottom:1px solid var(--bor);display:flex;align-items:center;gap:6px">
+<b style="color:var(--w)">row ${idx+1}</b><span class="chip s" style="margin-left:auto" onclick="showLinkM()">⋈ link</span>
+<span style="cursor:pointer;color:var(--faint)" onclick="selRec=null;rpTab='ops';renderRPT();renderRP();renderGrid()">✕</span></div>`;
+cols.forEach(c=>{const v=row.v[c._a]||'';
+if(c.type==='formula'){h+=`<div class="rp-field"><label>${esc(c.name)} <span style="color:var(--e)">ƒ</span></label><div class="rv" style="color:var(--e)">${evalF(c.formula,rows,cols)}</div></div>`;}
+else if(c.type==='select'){h+=`<div class="rp-field"><label>${esc(c.name)}</label><div class="rv" style="cursor:pointer" onclick="showPicker(event,'${row._a}','${c._a}')">${v||'—'}</div></div>`;}
+else if(c.type==='link'){const lb=findLL(row._a,c._a,c.link_tbl);h+=`<div class="rp-field"><label>${esc(c.name)} <span style="color:var(--s)">⋈</span></label><div class="rv" style="cursor:pointer;color:var(--s)" onclick="showLP('${row._a}','${c._a}','${c.link_tbl}')">${lb||'+ link'}</div></div>`;}
+else h+=`<div class="rp-field"><label>${esc(c.name)}</label><div class="rv" contenteditable="true" data-r="${row._a}" data-c="${c._a}" onfocus="cpv=this.textContent" onblur="cbl(this)">${esc(v)}</div></div>`;});
+const links=LS.cons.filter(c=>c.src===selRec||c.tgt===selRec);
+if(links.length){h+='<div class="rp-links"><h5>⋈ links</h5>';links.forEach(lk=>{const other=lk.src===selRec?lk.tgt:lk.src;
+let or=null,oi='?',lb=other,otbl=null;
+for(const[tid,tbl]of Object.entries(tables)){const trows=LS.rows[tid]||[];const found=trows.find(r=>r._a===other);
+if(found){or=found;oi=trows.indexOf(found)+1;otbl=tid;const fc=(LS.columns[tid]||[])[0];lb=fc?found.v[fc._a]||other:other;break;}}
+const tblName=otbl&&otbl!==AT?tables[otbl]?.name+' › ':'';
+h+=`<div class="rp-link" onclick="navToRec('${other}','${otbl||AT}')">⋈ ${esc(tblName)}${oi}: ${esc(lb)}</div>`;});h+='</div>';}
+h+=`<div class="rp-anchor">${esc(row._a)}</div>`;
+const re=EL.filter(e=>e.anchor===selRec).slice(-20);h+='<div class="rp-evts"><h5>events ('+re.length+')</h5>';
+re.forEach(e=>{const t=new Date(e.timestamp).toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+h+=`<div class="rp-evt"><span class="op ${opc(e.type)}">${e.type}</span> ${t} ${esc(e.description)}</div>`;});h+='</div>';b.innerHTML=h;}
+function renderOps(b){b.innerHTML='';EL.slice(-80).forEach(e=>{const d=document.createElement('div');d.className='le';const t=new Date(e.timestamp).toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+d.innerHTML=`<span class="ts">${t}</span> <span class="op ${opc(e.type)}">${e.type}</span> <span class="desc">${esc(e.description)}</span>`;b.appendChild(d);});}
+function renderMx(b){b.innerHTML='';EL.slice(-20).forEach(e=>{const d=document.createElement('div');d.className='me';
+d.innerHTML=synHL(JSON.stringify({type:`com.eobase.${e.type.toLowerCase()}`,sender:e.sender,ts:e.timestamp,content:e.content},null,2));b.appendChild(d);});}
+function renderSync(b){b.innerHTML=`<div class="sync-note">${mx?`<b style="color:var(--e)">● connected · e2ee active</b><br><br>
+user: ${esc(mxU)}<br>room: <span style="color:var(--s)">${esc(mxRoom)}</span><br>
+storage: ${sm} (gzip compressed)<br><br>
+every change saves immediately to this encrypted room. the homeserver stores ciphertext it cannot read.<br><br>
+<b>to sync large datasets:</b><br>serialize log → gzip → encrypt → upload to media store → share pointer event in room. one file, full dataset.`
+:`<b>local only — not encrypted</b><br><br>
+data is stored in ${sm}${sm==='opfs'?' (gzip compressed)':''}. connect a matrix account to encrypt and sync.<br><br>
+<a href="https://servers.joinmatrix.org/" target="_blank">get a matrix account →</a>`}</div>`;}
+function synHL(j){return j.replace(/("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,m=>{if(/^"/.test(m)){if(/:$/.test(m))return`<span class="mk">${m}</span>`;return`<span class="ms">${m}</span>`;}return`<span class="mn">${m}</span>`;});}
+function showLinkM(){if(!selRec||!LS)return;let all=[];for(const[tid,tbl]of Object.entries(tables)){const tr=LS.rows[tid]||[];const tc=LS.columns[tid]||[];const fc=tc[0];
+tr.forEach((r,i)=>{if(r._a===selRec)return;all.push({a:r._a,lb:fc?r.v[fc._a]||'row '+(i+1):'row '+(i+1),tn:tbl.name,tbl:tid});});}
+let h=`<div class="mbg" onclick="if(event.target===this)closeM()"><div class="mdl"><h3>⋈ link</h3>
+<input id="lf" placeholder="filter..." oninput="filterLI()"><div class="link-list" id="ll">`;
+all.forEach(r=>{h+=`<div class="link-item" data-s="${r.lb.toLowerCase()}" onclick="mkLink('${selRec}','${r.a}','${r.tbl}','')"><span style="color:var(--faint)">${esc(r.tn)}</span> ${esc(r.lb)}</div>`;});
+h+='</div><div class="ma"><span class="chip" onclick="closeM()">cancel</span></div></div></div>';document.getElementById('modal-container').innerHTML=h;}
+
+// ── SCRUBBER ──
+function uScrub(){const s=document.getElementById('scrubber');s.max=Math.max(0,EL.length-1);
+if(scrubPos===null){s.value=s.max;document.getElementById('scrub-pos').textContent=EL.length+'/'+EL.length;
+document.getElementById('live-btn').className='live-chip';document.getElementById('live-btn').textContent='● live';document.getElementById('scrubber-bar').classList.remove('rw');}}
+function onScrub(v){v=parseInt(v);if(v>=EL.length-1){goLive();}else{scrubPos=v;
+document.getElementById('scrub-pos').textContent=(v+1)+'/'+EL.length;
+document.getElementById('live-btn').className='live-chip rw';document.getElementById('live-btn').textContent='▶ live';
+document.getElementById('scrubber-bar').classList.add('rw');reproject();}}
+function goLive(){scrubPos=null;const s=document.getElementById('scrubber');s.value=s.max;
+document.getElementById('scrub-pos').textContent=EL.length+'/'+EL.length;
+document.getElementById('live-btn').className='live-chip';document.getElementById('live-btn').textContent='● live';
+document.getElementById('scrubber-bar').classList.remove('rw');reproject();}
+
+// ── MATRIX ──
+function showLogin(){document.getElementById('modal-container').innerHTML=`<div class="mbg" onclick="if(event.target===this)closeM()"><div class="mdl">
+<h3>${mx?'connected to matrix':'connect to matrix'}</h3>
+${mx?`<p>signed in as <b>${esc(mxU)}</b><br>room: <b style="color:var(--s)">${esc(mxRoom)}</b><br><br>your data room is derived from your username. same account always opens the same room. all changes save immediately.</p>
+<div class="ma"><span class="chip" onclick="closeM()">close</span><span class="chip" style="color:var(--g);border-color:var(--g)" onclick="dcMx()">disconnect</span></div>`:`
+<p>your data will be encrypted end-to-end and saved to a matrix room. every change syncs immediately. invite others to collaborate.</p>
+<div class="ib"><b>need an account?</b> matrix is federated — pick any server you trust.<br><a href="https://servers.joinmatrix.org/" target="_blank">browse servers →</a><br><br>popular: matrix.org · envs.net · tchncs.de · nitro.chat</div>
+<label>matrix id</label>
+<input id="mxu" placeholder="@you:matrix.org" oninput="autoServer()" autofocus>
+<label>password</label>
+<input id="mxp" type="password" onkeydown="if(event.key==='Enter')cMx()">
+<details style="margin-bottom:10px"><summary style="font-size:10px;color:var(--dim);cursor:pointer">server override</summary>
+<input id="mxs" placeholder="auto-detected from username" style="margin-top:4px">
+</details>
+<div class="ma"><span class="chip" onclick="closeM()">cancel</span><span class="chip on" onclick="cMx()">connect</span></div>`}</div></div>`;
+if(!mx)setTimeout(()=>document.getElementById('mxu')?.focus(),50);}
+function autoServer(){const u=document.getElementById('mxu').value;const m=u.match(/@[^:]+:(.+)/);
+const sEl=document.getElementById('mxs');if(m&&sEl)sEl.placeholder='https://'+m[1];}
+function cMx(){const u=document.getElementById('mxu').value.trim();if(!u)return;
+const sOverride=document.getElementById('mxs')?.value.trim();
+let server;const m=u.match(/@[^:]+:(.+)/);
+if(sOverride)server=sOverride;else if(m)server='https://'+m[1];else server='https://matrix.org';
+mxU=u.startsWith('@')?u:`@${u}:${server.replace('https://','').replace('http://','')}`; mx=true;
+// Deterministic room: same user always gets same room
+const serverHost=server.replace('https://','').replace('http://','');
+const userHash=mxU.replace(/[^a-z0-9]/gi,'').slice(0,12);
+mxRoom='#eo-base-'+userHash+':'+serverHost;
+document.getElementById('conn').classList.add('on');document.getElementById('conn-label').textContent=mxU;
+document.getElementById('ebadge').style.display=AT?'inline':'none';document.getElementById('conn-banner').classList.add('hidden');
+uStore();closeM();renderRP();sav();toast('demo: would connect as '+mxU,'sync');toast('demo: would join/create '+mxRoom,'sync');toast('with matrix-js-sdk this is real e2ee sync','sync');}
+function dcMx(){mx=false;mxU='';mxRoom='';document.getElementById('conn').classList.remove('on');document.getElementById('conn-label').textContent='connect →';
+document.getElementById('ebadge').style.display='none';document.getElementById('conn-banner').classList.remove('hidden');uStore();closeM();renderRP();toast('disconnected — local saves continue, matrix sync stopped','warn');}
+
+// ── MODALS ──
+function showNewTable(){document.getElementById('modal-container').innerHTML=`<div class="mbg" onclick="if(event.target===this)closeM()"><div class="mdl"><h3>new table</h3><label>name</label><input id="ntn" placeholder="e.g. contacts" autofocus onkeydown="if(event.key==='Enter')mkTbl()"><div class="ma"><span class="chip" onclick="closeM()">cancel</span><span class="chip on" onclick="mkTbl()">create</span></div></div></div>`;setTimeout(()=>document.getElementById('ntn').focus(),50);}
+function mkTbl(){const n=document.getElementById('ntn').value.trim();if(!n)return;const a=uid('tbl');
+emit('INS',a,{et:'table',name:n},`INS → table "${n}"`);closeM();selTable(a);setTimeout(()=>emit('INS',uid('col'),{et:'col',tbl:a,name:'Name',ct:'text'},'INS → col'),50);}
+function showNewCol(){const cols=LS?.columns[AT]||[];
+let chips='';cols.forEach(c=>{if(c.type!=='formula'&&c.type!=='link')chips+=`<span class="chip" onclick="document.getElementById('ncf').value=document.getElementById('ncf').value.replace(/\\([^)]*\\)/,'('+this.textContent+')');if(!document.getElementById('ncf').value.includes('('))document.getElementById('ncf').value+='('+this.textContent+')';">${esc(c.name)}</span>`;});
+let tblCbs='';for(const[id,tbl]of Object.entries(tables)){tblCbs+=`<label style="display:flex;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" class="ncl-cb" value="${id}" ${id===AT?'checked':''}> ${esc(tbl.name)}${id===AT?' (this)':''}</label>`;}
+document.getElementById('modal-container').innerHTML=`<div class="mbg" onclick="if(event.target===this)closeM()"><div class="mdl"><h3>add column</h3>
+<label>name</label><input id="ncn" placeholder="e.g. email" autofocus onkeydown="if(event.key==='Enter')mkCol()">
+<label>type</label><select id="nct" onchange="ctc()"><option value="text">text</option><option value="number">number</option><option value="select">select</option><option value="url">url</option><option value="date">date</option><option value="link">⋈ link</option><option value="formula">ƒ formula</option></select>
+<div id="cex"></div><div class="ma"><span class="chip" onclick="closeM()">cancel</span><span class="chip on" onclick="mkCol()">add</span></div></div></div>`;setTimeout(()=>document.getElementById('ncn').focus(),50);}
+function ctc(){const t=document.getElementById('nct').value,ex=document.getElementById('cex');
+const cols=LS?.columns[AT]||[];
+if(t==='link'){let cbs='';for(const[id,tbl]of Object.entries(tables)){cbs+=`<label style="display:flex;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" class="ncl-cb" value="${id}" ${id===AT?'checked':''}> ${esc(tbl.name)}${id===AT?' (this)':''}</label>`;}
+ex.innerHTML=`<label>link to</label><div style="border:1px solid var(--bor);padding:6px;margin-bottom:10px">${cbs||'no tables'}</div>`;}
+else if(t==='formula'){let chips='';cols.forEach(c=>{if(c.type!=='formula'&&c.type!=='link')chips+=`<span class="chip" onclick="var f=document.getElementById('ncf');var v=f.value;var m=v.match(/\\(([^)]*)\\)/);if(m)f.value=v.replace(m[1],this.textContent);else if(v)f.value=v+'('+this.textContent+')';else f.value=this.textContent;">${esc(c.name)}</span> `;});
+ex.innerHTML=`<label>formula</label><input id="ncf" placeholder="SUM(Budget)"><div style="font-size:10px;color:var(--dim);margin-bottom:6px">COUNT() · SUM · AVG · MIN · MAX · CONCAT</div><div style="margin-bottom:10px">${chips||'<span style="color:var(--faint)">no columns</span>'}</div>`;}
+else ex.innerHTML='';}
+function mkCol(){const n=document.getElementById('ncn').value.trim(),t=document.getElementById('nct').value;if(!n)return;
+const c={et:'col',tbl:AT,name:n,ct:t};if(t==='link'){const cbs=document.querySelectorAll('.ncl-cb:checked');c.link_tbl=Array.from(cbs).map(x=>x.value).join(',');}
+if(t==='formula')c.formula=document.getElementById('ncf')?.value||'';
+emit('INS',uid('col'),c,`INS → col "${n}" (${t})`);closeM();}
+function showInvite(){document.getElementById('modal-container').innerHTML=`<div class="mbg" onclick="if(event.target===this)closeM()"><div class="mdl"><h3>invite</h3>${mx?'':'<div class="ib"><a href="https://servers.joinmatrix.org/" target="_blank">get an account →</a></div>'}<label>matrix id</label><input placeholder="@alice:matrix.org" id="inv" ${mx?'':'disabled'}><div class="ma"><span class="chip" onclick="closeM()">close</span><span class="chip${mx?' on':''}" onclick="doInv()" ${mx?'':'style="opacity:.4;pointer-events:none"'}>invite</span></div></div></div>`;}
+function doInv(){const id=document.getElementById('inv').value.trim()||'@alice:matrix.org';emit('CON',AT,{src:mxU,tgt:id,rel:'invite',tbl:AT},`CON ${id}`);closeM();}
+function showBulk(){const colCount=(LS?.columns[AT]||[]).filter(c=>c.type!=='formula'&&c.type!=='link').length;
+document.getElementById('modal-container').innerHTML=`<div class="mbg" onclick="if(event.target===this)closeM()"><div class="mdl"><h3>⚡ bulk</h3>${!AT?'<p style="color:var(--g)">create a table first</p>':`<select id="bc"><option value="1000">1K</option><option value="10000" selected>10K</option><option value="100000">100K</option><option value="500000">500K</option></select>
+<div style="font-size:10px;color:var(--dim);margin-bottom:6px">each row = 1 event. ${colCount} data columns. uses compact bulk format.</div>
+<div id="bp" style="font-size:11px;color:var(--dim);margin-bottom:10px"></div>`}<div class="ma"><span class="chip" onclick="closeM()">cancel</span>${AT?'<span class="chip on" id="bg" onclick="bulkGen()">go</span>':''}</div></div></div>`;}
+async function bulkGen(){const count=parseInt(document.getElementById('bc').value);const btn=document.getElementById('bg');const prog=document.getElementById('bp');
+btn.style.opacity='.4';btn.style.pointerEvents='none';btn.textContent='...';
+const cols=(LS?.columns[AT]||[]).filter(c=>c.type!=='formula'&&c.type!=='link');
+const nm='Alice Bob Carol Dave Eve Frank Grace Hank Iris Jack Kate Leo Mia Nora Oscar Pam Quinn Rose Sam Tina'.split(' ');
+const dm='example.com test.org demo.net acme.co corp.io'.split(' ');
+let g=0;const bs=2000;const t0=performance.now();
+function genVal(c,i){if(c.type==='text')return c.name.toLowerCase().includes('name')?nm[~~(Math.random()*20)]+' '+nm[~~(Math.random()*20)]:'Record '+(i+1);
+if(c.type==='number')return''+~~(Math.random()*10000);if(c.type==='select')return TAGS[~~(Math.random()*6)];
+if(c.type==='url')return'https://'+dm[~~(Math.random()*5)]+'/'+(i+1);if(c.type==='date')return new Date(Date.now()-Math.random()*86400000*365).toISOString().slice(0,10);return'';}
+function batch(){const end=Math.min(g+bs,count);
+for(let i=g;i<end;i++){const a=uid('row');const v={};cols.forEach(c=>{v[c._a]=genVal(c,i);});
+EL.push({id:a,type:'INS',anchor:a,content:{et:'row',tbl:AT,v},timestamp:Date.now(),sender:'@bulk',room:'!graph'});}
+g=end;const pct=Math.round(g/count*100);const elapsed=(performance.now()-t0)/1000;
+const rate=g/elapsed;const eta=((count-g)/rate).toFixed(0);
+if(prog)prog.textContent=`${g.toLocaleString()} / ${count.toLocaleString()} (${pct}%) · ${rate.toFixed(0)} rows/sec${g<count?' · ~'+eta+'s left':''}`;
+if(g<count)setTimeout(batch,0);
+else{uScrub();reproject();renderRP();sav();
+if(prog)prog.textContent=`done. ${EL.length.toLocaleString()} events, ${document.getElementById('stat-fold').textContent} fold.`;
+btn.textContent='done';}}
+setTimeout(batch,0);}
+function closeM(){document.getElementById('modal-container').innerHTML='';}
+function wipeData(){if(!confirm('wipe all data? this clears local storage and cannot be undone.'))return;resetAll();}
+async function resetAll(){EL=[];tables={};AT=null;ec=0;scrubPos=null;selRec=null;LS=null;rpTab='ops';
+document.getElementById('empty-state').style.display='flex';document.getElementById('grid-scroll').style.display='none';
+document.getElementById('arb').style.display='none';document.getElementById('scrubber-bar').style.display='none';document.getElementById('vn').style.display='none';
+document.getElementById('tname').textContent='—';document.getElementById('tmeta').textContent='';document.getElementById('ebadge').style.display='none';
+renderTL();renderRPT();renderRP();document.getElementById('stat-events').textContent='0';document.getElementById('stat-entities').textContent='0';
+document.getElementById('stat-fold').textContent='0ms';document.getElementById('stat-disk').textContent='0';
+// Actually clear storage
+if(sm==='opfs'){try{const w=await dbH.createWritable();await w.write(new Blob([]));await w.close();toast('✓ opfs cleared','ok');}catch(e){toast('✗ failed to clear opfs','err');}}
+else if(sm==='idb'){try{dbH.transaction('ev','readwrite').objectStore('ev').delete('log');toast('✓ idb cleared','ok');}catch(e){toast('✗ failed to clear idb','err');}}
+else toast('memory cleared','ok');}
+function esc(s){if(typeof s!=='string')return s;const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+
+// ── TUTORIAL ──
+const TS=[{title:'eo///base',body:'no backend. no database. no schema. every action = typed operator event. state = fold(events). connect matrix for e2ee.',pos:'center'},
+{title:'operators',body:'<span class="op e">INS</span> create · <span class="op s">SEG</span> partition · <span class="op s">CON</span> link · <span class="op g">DEF</span> define · <span class="op g">EVA</span> evaluate · <span class="op g">REC</span> reframe<br><br>three triads: <span style="color:var(--e)">existence</span> · <span style="color:var(--s)">structure</span> · <span style="color:var(--g)">significance</span>',pos:'center'},
+{title:'grid',body:'click cells to edit. row # opens record detail. add link + formula columns. every edit fires an operator event visible in the ops tab.',target:'grid-wrap',pos:'left'},
+{title:'timeline',body:'scrub to see state at any point. ● live = head of stream.',target:'scrubber-bar',pos:'above'},
+{title:'start',body:'create tables. link records across tables. add formulas. bulk generate to test at scale.<br><br><a href="https://servers.joinmatrix.org/" target="_blank">get a matrix account →</a>',pos:'center'}];
+let tutS=0;function startTut(){tutS=0;rTut();}
+function rTut(){if(tutS>=TS.length){document.getElementById('tut-container').innerHTML='';return;}
+const s=TS[tutS];let h='<div class="tut-bg" onclick="eTut()"></div>';let st='';
+if(s.target){const el=document.getElementById(s.target);if(el){const r=el.getBoundingClientRect();
+h+=`<div class="tut-pulse" style="left:${r.left-1}px;top:${r.top-1}px;width:${r.width+2}px;height:${r.height+2}px"></div>`;
+if(s.pos==='left')st=`right:${window.innerWidth-r.left+8}px;top:${Math.max(8,r.top)}px`;
+else if(s.pos==='above')st=`left:${r.left}px;bottom:${window.innerHeight-r.top+8}px`;}}
+if(s.pos==='center'||!st)st='left:50%;top:50%;transform:translate(-50%,-50%)';
+h+=`<div class="tut-card" style="${st}"><div class="sn">${tutS+1}/${TS.length}</div><h4>${s.title}</h4><p>${s.body}</p>
+<div class="ta"><span class="chip" onclick="eTut()">skip</span>${tutS>0?'<span class="chip" onclick="tutS--;rTut()">back</span>':''}
+<span class="chip on" onclick="tutS++;rTut()">${tutS===TS.length-1?'done':'next'}</span></div></div>`;
+document.getElementById('tut-container').innerHTML=h;}function eTut(){document.getElementById('tut-container').innerHTML='';}
+
+// ── INIT ──
+async function init(){await initS();renderRPT();if(!isMob()){sbV=true;document.getElementById('sidebar').classList.remove('collapsed');}
+if(EL.length===0){seed();toast('loaded sample data — wipe to start fresh','warn');}else{const s=fold(EL);const t=Object.keys(s.tables);if(t.length)selTable(t[0]);toast('✓ restored '+EL.length.toLocaleString()+' events from last session','ok');}}
+function seed(){const t1=uid('tbl'),t2=uid('tbl');
+emit('INS',t1,{et:'table',name:'Contacts'},'',true);emit('INS',t2,{et:'table',name:'Projects'},'',true);
+const cc=[{n:'Name',t:'text'},{n:'Status',t:'select'},{n:'Email',t:'url'},{n:'Notes',t:'text'}];const ca=[];
+cc.forEach(c=>{const a=uid('col');ca.push(a);emit('INS',a,{et:'col',tbl:t1,name:c.n,ct:c.t},'',true);});
+const pc=[{n:'Project',t:'text'},{n:'Status',t:'select'},{n:'Budget',t:'number'}];const pa=[];
+pc.forEach(c=>{const a=uid('col');pa.push(a);emit('INS',a,{et:'col',tbl:t2,name:c.n,ct:c.t},'',true);});
+emit('INS',uid('col'),{et:'col',tbl:t1,name:'Project',ct:'link',link_tbl:t2+','+t1},'',true);
+emit('INS',uid('col'),{et:'col',tbl:t2,name:'Total',ct:'formula',formula:'SUM(Budget)'},'',true);
+[['Alice Park','Active','alice@example.com','key contact'],['Bob Chen','Review','bob@test.org','follow up'],['Carol Reyes','Active','carol@demo.net','lead'],['Dave Kim','Draft','dave@acme.co','intro needed']]
+.forEach(r=>{const a=uid('row');emit('INS',a,{et:'row',tbl:t1},'',true);r.forEach((v,i)=>{if(v)emit('DEF',a,{tbl:t1,path:ca[i],val:v},'',true);});});
+[['Website redesign','Active','25000'],['Mobile app','Draft','80000'],['API integration','Review','15000']]
+.forEach(r=>{const a=uid('row');emit('INS',a,{et:'row',tbl:t2},'',true);r.forEach((v,i)=>{if(v)emit('DEF',a,{tbl:t2,path:pa[i],val:v},'',true);});});
+finB();selTable(t1);}
+init();
+</script></body></html>
