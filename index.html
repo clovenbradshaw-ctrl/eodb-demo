@@ -577,10 +577,11 @@ init();
 </script>
 <script type="module">
 // ── REAL MATRIX-JS-SDK WIRING (E2EE via rust crypto / megolm) ──
-// Pin matrix-js-sdk AND its transitive matrix-events-sdk — esm.sh defaults to
-// 0.0.1 (stable) which is missing M_POLL_START that the sdk's poll module imports;
-// the 0.0.1-beta.7 prerelease has the symbol.
-const SDK_URL='https://esm.sh/matrix-js-sdk@34.13.0?bundle&target=es2020&deps=matrix-events-sdk@0.0.1-beta.7';
+// matrix-js-sdk via esm.sh. Newer majors (v37+) ship with a working
+// matrix-events-sdk dep — older v34 was crashing because the M_POLL_START
+// symbol it imports doesn't exist in any published matrix-events-sdk
+// (npm only has 0.0.1 and 0.0.1-beta.X, neither has the symbol).
+const SDK_URL='https://esm.sh/matrix-js-sdk@37?bundle&target=es2020';
 const SESSION_KEY='eo-base-mx-session';
 const EVENT_PREFIX='com.eobase.';
 
