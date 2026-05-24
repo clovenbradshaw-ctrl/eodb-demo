@@ -233,7 +233,7 @@ body{font:13px/1.6 monospace;background:var(--bg);color:var(--txt);height:100vh;
     <div class="rp-close" onclick="toggleRP()">panel <span>✕</span></div>
     <div id="rp-tabs"></div>
     <div id="rp-body"></div>
-    <div id="fold-bar">events:<b id="stat-events">0</b> entities:<b id="stat-entities">0</b> fold:<b id="stat-fold">0ms</b> disk:<b id="stat-disk">0</b></div>
+    <div id="fold-bar">events:<b id="stat-events">0</b> entities:<b id="stat-entities">0</b> fold:<b id="stat-fold">0ms</b> disk:<b id="stat-disk">0</b> mx:<b id="stat-mx">off</b></div>
   </div>
 </div>
 <div class="mob-backdrop" id="mob-backdrop" onclick="closeMob()"></div>
@@ -400,10 +400,12 @@ d.innerHTML=`<span class="ts">${t}</span> <span class="op ${opc(e.type)}">${e.ty
 function renderMx(b){b.innerHTML='';EL.slice(-20).forEach(e=>{const d=document.createElement('div');d.className='me';
 d.innerHTML=synHL(JSON.stringify({type:`com.eobase.${e.type.toLowerCase()}`,sender:e.sender,ts:e.timestamp,content:e.content},null,2));b.appendChild(d);});}
 function renderSync(b){const cs=window._eo?.cryptoStatus?.()||(mx?'unknown':'off');
-b.innerHTML=`<div class="sync-note">${mx?`<b style="color:var(--e)">● connected · e2ee ${esc(cs)}</b><br><br>
+const broken=cs==='broken';
+b.innerHTML=`<div class="sync-note">${mx?`<b style="color:var(${broken?'--g':'--e'})">${broken?'⚠ connected · e2ee BROKEN':'● connected · e2ee '+esc(cs)}</b><br><br>
 user: ${esc(mxU)}<br>room: <span style="color:var(--s)">${esc(mxRoom)}</span><br>
 storage: ${sm} (gzip compressed)<br>crypto: matrix-js-sdk rust crypto (megolm v1 aes-sha2)<br><br>
 every edit is sent as a <code>com.eobase.&lt;op&gt;</code> event. the homeserver stores ciphertext only; only joined &amp; verified devices in this room can decrypt.<br><br>
+<span class="chip" onclick="window._eo?.verify?.()">⟳ self-test</span> <span class="chip" onclick="window._eo?.pushLocal?.()">↑ push local</span><br><br>
 <b>multi-device:</b> sign in on another device with the same account to sync. <b>collaborate:</b> invite another matrix id from the invite menu.`
 :`<b>local only — not encrypted</b><br><br>
 data is stored in ${sm}${sm==='opfs'?' (gzip compressed)':''}. connect a matrix account to encrypt and sync.<br><br>
@@ -569,6 +571,7 @@ window._eo_state={
     uStore();renderRP();},
   ingest(ev){if(EL.some(e=>e.id===ev.id))return false;EL.push(ev);ec=Math.max(ec,EL.length);
     uScrub();if(scrubPos===null){renderRP();reproject();}sav();return true;},
+  flush(){sav();},
 };
 init();
 </script>
@@ -582,7 +585,13 @@ const SESSION_KEY='eo-base-mx-session';
 const EVENT_PREFIX='com.eobase.';
 
 let sdk=null,client=null,session=null,roomId=null,roomAlias=null;
+let cryptoBroken=false,roomEncrypted=false;
+let mxSent=0,mxFailed=0,mxPending=0;
 const T=(...a)=>window._eo_state?.toast?.(...a);
+function refreshMxStat(){const el=document.getElementById('stat-mx');if(!el)return;
+  if(!client){el.textContent='off';return;}
+  const parts=[mxSent];if(mxPending)parts.push('+'+mxPending);if(mxFailed)parts.push('✗'+mxFailed);
+  el.textContent=parts.join('');}
 
 async function loadSdk(){if(sdk)return sdk;
   try{sdk=await import(SDK_URL);return sdk;}
@@ -657,8 +666,10 @@ async function buildClient(s){
     store,useAuthorizationHeader:true,timelineSupport:true,
   });
   // Real E2EE: rust crypto (megolm). Keys are persisted in IndexedDB by the sdk.
+  cryptoBroken=false;
   try{await client.initRustCrypto();}
-  catch(e){console.warn('[mx] rust crypto init failed',e);T('e2ee init failed — falling back unencrypted: '+(e?.message||e),'warn');}
+  catch(e){console.error('[mx] rust crypto init failed',e);cryptoBroken=true;
+    T('✗ E2EE init failed — sends to the encrypted room will be REFUSED by the sdk: '+(e?.message||e),'err');}
   // Trust-on-first-use: share keys with every joined device in the room.
   try{const crypto=client.getCrypto?.();if(crypto)crypto.globalBlacklistUnverifiedDevices=false;}
   catch(e){console.warn('[mx] crypto trust setup',e);}
@@ -671,9 +682,15 @@ async function buildClient(s){
   await findOrCreateRoom();
   attachListeners();
   await backfill();
+  // Honest check: is the room actually encrypted server-side?
+  try{roomEncrypted=!!client.isRoomEncrypted?.(roomId);}catch{roomEncrypted=false;}
+  T(roomEncrypted?'✓ room encryption confirmed (megolm)':'⚠ room is NOT encrypted server-side',roomEncrypted?'ok':'warn');
+  mxSent=0;mxFailed=0;mxPending=0;refreshMxStat();
   s.roomId=roomId;s.roomAlias=roomAlias;
   localStorage.setItem(SESSION_KEY,JSON.stringify(s));
-  window._eo_state?.setConnected?.(s.userId,roomAlias);}
+  window._eo_state?.setConnected?.(s.userId,roomAlias);
+  // Concrete round-trip proof: send a ping, await its echo on the timeline.
+  selfTest().catch(e=>console.warn('[mx] self-test error',e));}
 
 async function connect({user,password,server}){
   await loadSdk();
@@ -699,16 +716,66 @@ async function disconnect(){
   try{await client?.logout?.(true);}catch(e){console.warn('[mx] logout',e);}
   try{client?.stopClient?.();}catch{}
   try{await client?.clearStores?.();}catch{}
-  client=null;session=null;roomId=null;roomAlias=null;
+  client=null;session=null;roomId=null;roomAlias=null;cryptoBroken=false;roomEncrypted=false;
+  mxSent=mxFailed=mxPending=0;refreshMxStat();
   localStorage.removeItem(SESSION_KEY);}
 
 async function publish(ev){
   if(!client||!roomId)return;
   if(ev.sender==='@bulk')return; // don't flood the room with bulk-generated events
+  if(cryptoBroken&&roomEncrypted){
+    mxFailed++;refreshMxStat();
+    if(mxFailed===1)T('matrix send REFUSED — e2ee never initialized. fix crypto or move to an unencrypted room.','err');
+    return;}
+  mxPending++;refreshMxStat();
   try{
-    const type=EVENT_PREFIX+ev.type.toLowerCase();
-    await client.sendEvent(roomId,type,{eo:ev,dev:client.getDeviceId(),v:1});
-  }catch(e){console.warn('[mx] send failed',e);T('matrix send failed: '+(e?.message||e),'err');}}
+    const r=await client.sendEvent(roomId,EVENT_PREFIX+ev.type.toLowerCase(),{eo:ev,dev:client.getDeviceId(),v:1});
+    mxPending--;mxSent++;refreshMxStat();
+    ev._synced=true; // persisted via sav() — protects against duplicate push on rerun
+    return r;
+  }catch(e){
+    mxPending--;mxFailed++;refreshMxStat();
+    console.warn('[mx] send failed',e);T('matrix send failed: '+(e?.message||e),'err');}}
+
+async function selfTest(){
+  if(!client||!roomId){T('self-test: not connected','err');return false;}
+  const nonce='ping-'+Math.random().toString(36).slice(2,10);
+  let echoedId=null;
+  const onEv=(ev,room)=>{
+    if(!room||room.roomId!==roomId)return;
+    if(ev.isEncrypted()&&!ev.getClearContent())return;
+    if(ev.getType()==='com.eobase.ping'&&ev.getContent()?.nonce===nonce)echoedId=ev.getId();};
+  const h1=(ev,room)=>onEv(ev,room);
+  const h2=(ev)=>{const r=client.getRoom(ev.getRoomId());if(r)onEv(ev,r);};
+  client.on(sdk.RoomEvent.Timeline,h1);
+  client.on(sdk.MatrixEventEvent.Decrypted,h2);
+  let resp;
+  try{resp=await client.sendEvent(roomId,'com.eobase.ping',{nonce,ts:Date.now()});}
+  catch(e){client.off(sdk.RoomEvent.Timeline,h1);client.off(sdk.MatrixEventEvent.Decrypted,h2);
+    T('✗ self-test send failed: '+(e?.message||e),'err');return false;}
+  T('self-test sent · server event '+resp.event_id+' · awaiting echo…','sync');
+  for(let i=0;i<80;i++){if(echoedId)break;await new Promise(r=>setTimeout(r,100));}
+  client.off(sdk.RoomEvent.Timeline,h1);
+  client.off(sdk.MatrixEventEvent.Decrypted,h2);
+  if(echoedId){T('✓ matrix round-trip verified · '+echoedId,'ok');return true;}
+  T('⚠ no echo in 8s — server accepted the send but the timeline did not return it. e2ee may be one-way or sync is stuck.','warn');return false;}
+
+async function pushLocal(){
+  if(!client||!roomId){T('not connected','err');return;}
+  const EL=window._eo_state?.EL||[];
+  // Skip: bulk events; events received from remote senders (id has 'sender/dev:'); events
+  //       we've already published in this session or a prior one (_synced flag persists via sav).
+  const todo=EL.filter(e=>e.sender!=='@bulk'&&!e.id.includes(':')&&!e._synced);
+  if(!todo.length){T('no unsent local events','warn');return;}
+  T('pushing '+todo.length+' local events to matrix…','sync');
+  let ok=0;
+  for(const ev of todo){
+    const r=await publish(ev);
+    if(r)ok++;
+    if(ok%25===0&&ok>0)T('pushed '+ok+'/'+todo.length+'…','sync');
+  }
+  window._eo_state?.flush?.();
+  T('✓ pushed '+ok+'/'+todo.length+' events to matrix','ok');}
 
 async function invite(userId){
   if(!client||!roomId)throw new Error('not connected');
@@ -717,12 +784,12 @@ async function invite(userId){
 
 function cryptoStatus(){
   if(!client)return 'off';
+  if(cryptoBroken)return 'broken';
   try{const c=client.getCrypto?.();if(!c)return 'unavailable';
-    const room=client.getRoom?.(roomId);
-    if(room&&client.isRoomEncrypted?.(roomId))return 'megolm';
+    if(client.isRoomEncrypted?.(roomId))return 'megolm';
     return 'ready';}catch{return 'unknown';}}
 
-window._eo={connect,disconnect,publish,invite,cryptoStatus};
+window._eo={connect,disconnect,publish,invite,cryptoStatus,verify:selfTest,pushLocal};
 
 // Preload sdk + attempt session resume in the background.
 (async()=>{
