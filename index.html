@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"><title>EO///Base</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23fff'/><g stroke-width='4' stroke-linecap='round'><line x1='6' y1='25' x2='14' y2='7' stroke='%2300aa77'/><line x1='14' y1='25' x2='22' y2='7' stroke='%236644cc'/><line x1='22' y1='25' x2='30' y2='7' stroke='%23bb2222'/></g></svg>">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--e:#0a7;--s:#64c;--g:#b22;--w:#a80;--bor:#ddd;--bg:#fff;--bg2:#f7f7f5;--bg3:#eee;--txt:#222;--dim:#888;--faint:#bbb;--row-h:28px;--col-w:150px}
@@ -573,8 +574,10 @@ init();
 </script>
 <script type="module">
 // ── REAL MATRIX-JS-SDK WIRING (E2EE via rust crypto / megolm) ──
-// Pin to a known-good version. Bundle pulls deps inline so the WASM crypto loads.
-const SDK_URL='https://esm.sh/matrix-js-sdk@34.13.0?bundle&target=es2020';
+// Pin matrix-js-sdk AND its transitive matrix-events-sdk — esm.sh defaults to
+// 0.0.1 (stable) which is missing M_POLL_START that the sdk's poll module imports;
+// the 0.0.1-beta.7 prerelease has the symbol.
+const SDK_URL='https://esm.sh/matrix-js-sdk@34.13.0?bundle&target=es2020&deps=matrix-events-sdk@0.0.1-beta.7';
 const SESSION_KEY='eo-base-mx-session';
 const EVENT_PREFIX='com.eobase.';
 
