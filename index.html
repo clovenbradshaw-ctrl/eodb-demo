@@ -242,7 +242,7 @@ body{font:13px/1.6 monospace;background:var(--bg);color:var(--txt);height:100vh;
 <div id="tut-container"></div>
 <div id="toasts"></div>
 <script>
-let EL=[],tables={},AT=null,rpTab='ops',scrubPos=null,ec=0,sm='memory',dbH=null,svt=null,mx=false,mxU='',mxRoom='',sbV=false,rpV=true,selRec=null,LS=null;
+let EL=[],tables={},AT=null,rpTab='ops',scrubPos=null,ec=0,sm='memory',svt=null,mx=false,mxU='',mxRoom='',sbV=false,rpV=true,selRec=null,LS=null;
 const RH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--row-h'))||28;
 const BUF=8;function isMob(){return window.innerWidth<=768;}
 // Operator → triad class
@@ -252,26 +252,93 @@ const FORMULAS={COUNT:r=>r.length,SUM:(r,c)=>r.reduce((a,x)=>a+(parseFloat(x.v[c
 MIN:(r,c)=>r.length?Math.min(...r.map(x=>parseFloat(x.v[c])||0)):0,MAX:(r,c)=>r.length?Math.max(...r.map(x=>parseFloat(x.v[c])||0)):0,
 CONCAT:(r,c)=>r.map(x=>x.v[c]||'').filter(Boolean).join(', ')};
 
-// ── PERSIST (gzip binary) ──
+// ── PERSIST (gzip binary, dual-write OPFS + IDB) ──
 function toast(msg,type='ok'){const el=document.createElement('div');el.className='toast '+type;el.textContent=msg;
 document.getElementById('toasts').appendChild(el);setTimeout(()=>el.remove(),3000);}
 const STORE_KEY='eo-base'; // stable key — never change this
-async function initS(){try{if(navigator.storage?.getDirectory){const r=await navigator.storage.getDirectory();dbH=await r.getFileHandle(STORE_KEY+'.bin',{create:true});sm='opfs';uStore();await loadS();return;}}catch(e){console.log('opfs fail:',e);}
-try{await new Promise((res,rej)=>{const r=indexedDB.open(STORE_KEY,1);r.onupgradeneeded=e=>e.target.result.createObjectStore('ev');r.onsuccess=e=>{dbH=e.target.result;sm='idb';res()};r.onerror=()=>rej()});uStore();await loadIDB();return;}catch(e){console.log('idb fail:',e);}sm='memory';uStore();toast('no persistent storage — data will be lost on reload','warn');}
+// Both backends run in parallel when available, so OPFS eviction or write-success-without-flush
+// can never leave us with zero recoverable copies.
+let opfsH=null,idbH=null,savePromise=Promise.resolve(),savePending=null;
+async function openOPFS(){try{if(!navigator.storage?.getDirectory)return null;
+  const r=await navigator.storage.getDirectory();
+  return await r.getFileHandle(STORE_KEY+'.bin',{create:true});}catch(e){console.warn('[persist] opfs open failed',e);return null;}}
+async function openIDB(){try{return await new Promise((res,rej)=>{
+  const r=indexedDB.open(STORE_KEY,1);
+  r.onupgradeneeded=e=>e.target.result.createObjectStore('ev');
+  r.onsuccess=e=>res(e.target.result);
+  r.onerror=()=>rej(r.error||new Error('idb open failed'));});}catch(e){console.warn('[persist] idb open failed',e);return null;}}
+async function initS(){
+  // Request persistent storage so the browser doesn't evict our data under quota pressure.
+  try{if(navigator.storage?.persist){const granted=await navigator.storage.persist();console.log('[persist] persistent storage:',granted);}}catch(e){console.warn('[persist] persist request failed',e);}
+  // Open both backends. Either may be null on this browser.
+  [opfsH,idbH]=await Promise.all([openOPFS(),openIDB()]);
+  if(opfsH&&idbH)sm='opfs+idb';
+  else if(opfsH)sm='opfs';
+  else if(idbH)sm='idb';
+  else{sm='memory';uStore();toast('no persistent storage — data will be lost on reload','warn');return;}
+  uStore();
+  // Try every available backend on load and use whichever returns data.
+  const loaded=await loadAny();
+  console.log('[persist] init: sm='+sm+', loaded='+EL.length+' events, source='+(loaded||'none'));
+  if(loaded){toast('✓ loaded '+EL.length.toLocaleString()+' events from '+loaded,'ok');
+    ec=EL.length;reproject();renderRP();}}
 function uStore(){document.getElementById('store').textContent=sm+(mx?' · e2ee · '+mxRoom:'');}
-async function compress(json){const raw=new Blob([json]);try{if(typeof CompressionStream!=='undefined'){return await new Response(raw.stream().pipeThrough(new CompressionStream('gzip'))).blob();}}catch(e){}return raw;}
+async function compress(json){const raw=new Blob([json]);try{if(typeof CompressionStream!=='undefined'){return await new Response(raw.stream().pipeThrough(new CompressionStream('gzip'))).blob();}}catch(e){console.warn('[persist] compress failed',e);}return raw;}
 async function decompress(blob){try{return await new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();}catch(e){return await blob.text();}}
-async function sav(){if(svt)clearTimeout(svt);svt=setTimeout(async()=>{
-const blob=await compress(JSON.stringify(EL));const s=blob.size;
-const sizeLabel=s>1048576?(s/1048576).toFixed(1)+'MB':(s/1024).toFixed(0)+'KB';
-document.getElementById('stat-disk').textContent=sizeLabel;
-if(sm==='opfs'){try{const w=await dbH.createWritable();await w.write(blob);await w.close();toast('✓ opfs · '+sizeLabel+' · '+EL.length+' events','ok');}catch(e){toast('✗ opfs write failed: '+e.message,'err');}}
-else if(sm==='idb'){try{dbH.transaction('ev','readwrite').objectStore('ev').put(blob,'log');toast('✓ idb · '+sizeLabel,'ok');}catch(e){toast('✗ idb write failed: '+e.message,'err');}}
-else{toast('⚠ memory only — not saved','warn');}
-},500);}
-async function loadS(){try{const f=await dbH.getFile();if(!f.size){toast('opfs empty — starting fresh','warn');return;}const text=await decompress(f);EL=JSON.parse(text);ec=EL.length;reproject();renderRP();
-toast('✓ loaded '+EL.length.toLocaleString()+' events from opfs ('+((f.size/1024).toFixed(0))+'KB on disk)','ok');}catch(e){console.log('load:',e);toast('✗ opfs load failed: '+e.message,'err');}}
-async function loadIDB(){try{await new Promise(res=>{const r=dbH.transaction('ev','readonly').objectStore('ev').get('log');r.onsuccess=async e=>{if(e.target.result){const text=await decompress(e.target.result);EL=JSON.parse(text);ec=EL.length;reproject();renderRP();toast('loaded '+EL.length.toLocaleString()+' events from idb','ok');}res();};r.onerror=()=>res()});}catch(e){toast('idb load failed','err');}}
+async function readOPFS(){if(!opfsH)return null;try{const f=await opfsH.getFile();if(!f.size)return null;const text=await decompress(f);const arr=JSON.parse(text);return Array.isArray(arr)?{arr,bytes:f.size}:null;}catch(e){console.warn('[persist] opfs read failed',e);return null;}}
+async function readIDB(){if(!idbH)return null;try{return await new Promise(res=>{const r=idbH.transaction('ev','readonly').objectStore('ev').get('log');r.onsuccess=async e=>{
+  if(!e.target.result){res(null);return;}
+  try{const text=await decompress(e.target.result);const arr=JSON.parse(text);res(Array.isArray(arr)?{arr,bytes:e.target.result.size||0}:null);}catch(err){console.warn('[persist] idb parse failed',err);res(null);}};r.onerror=()=>{console.warn('[persist] idb read failed',r.error);res(null)};});}catch(e){console.warn('[persist] idb tx failed',e);return null;}}
+async function loadAny(){
+  // Prefer whichever copy has MORE events — protects against one backend silently truncating.
+  const [o,i]=await Promise.all([readOPFS(),readIDB()]);
+  let pick=null,source=null;
+  if(o&&i){if(o.arr.length>=i.arr.length){pick=o;source='opfs';}else{pick=i;source='idb';}}
+  else if(o){pick=o;source='opfs';}
+  else if(i){pick=i;source='idb';}
+  if(!pick)return null;
+  EL=pick.arr;
+  console.log('[persist] load source='+source+' bytes='+pick.bytes+' events='+pick.arr.length+(o&&i?' (opfs='+o.arr.length+', idb='+i.arr.length+')':''));
+  return source+' ('+((pick.bytes/1024).toFixed(0))+'KB)';}
+async function writeOPFS(blob){if(!opfsH)return false;
+  // Convert to ArrayBuffer first — some Chrome versions don't reliably flush
+  // when a streaming Blob is passed to FileSystemWritableFileStream.write().
+  const buf=await blob.arrayBuffer();
+  const w=await opfsH.createWritable();
+  try{await w.write(buf);await w.close();}catch(e){try{await w.abort?.();}catch{}throw e;}
+  // Verify by reading back size — catches the silent-flush-failure case.
+  const f=await opfsH.getFile();
+  if(f.size!==buf.byteLength)throw new Error('opfs verify: wrote '+buf.byteLength+' but file is '+f.size);
+  return true;}
+async function writeIDB(blob){if(!idbH)return false;
+  return await new Promise((res,rej)=>{const tx=idbH.transaction('ev','readwrite');
+    tx.oncomplete=()=>res(true);tx.onerror=()=>rej(tx.error||new Error('idb tx error'));tx.onabort=()=>rej(tx.error||new Error('idb tx abort'));
+    tx.objectStore('ev').put(blob,'log');});}
+async function doSave(){
+  const snapshot=EL.slice();
+  const blob=await compress(JSON.stringify(snapshot));const s=blob.size;
+  const sizeLabel=s>1048576?(s/1048576).toFixed(1)+'MB':(s/1024).toFixed(0)+'KB';
+  document.getElementById('stat-disk').textContent=sizeLabel;
+  let okOpfs=false,okIdb=false,errs=[];
+  if(opfsH){try{okOpfs=await writeOPFS(blob);}catch(e){errs.push('opfs:'+(e?.message||e));console.error('[persist] opfs write',e);}}
+  if(idbH){try{okIdb=await writeIDB(blob);}catch(e){errs.push('idb:'+(e?.message||e));console.error('[persist] idb write',e);}}
+  if(okOpfs||okIdb){const parts=[];if(okOpfs)parts.push('opfs');if(okIdb)parts.push('idb');
+    toast('✓ '+parts.join('+')+' · '+sizeLabel+' · '+snapshot.length+' events','ok');}
+  else if(!opfsH&&!idbH){toast('⚠ memory only — not saved','warn');}
+  else{toast('✗ save failed: '+errs.join(' / '),'err');}}
+function sav(){if(svt)clearTimeout(svt);
+  // Coalesce; the next save will pick up the latest EL when it runs.
+  savePending=new Promise(res=>{svt=setTimeout(async()=>{svt=null;savePending=null;
+    savePromise=savePromise.then(doSave,doSave).then(res,res);
+  },300);});return savePending;}
+async function flushNow(){
+  // Drain pending debounced save, then any in-flight save.
+  if(svt){clearTimeout(svt);svt=null;savePending=null;savePromise=savePromise.then(doSave,doSave);}
+  try{await savePromise;}catch(e){console.warn('[persist] flush error',e);}}
+// Best-effort flush before the page goes away.
+addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushNow();});
+addEventListener('pagehide',()=>{flushNow();});
+addEventListener('beforeunload',()=>{flushNow();});
 
 // ── CORE ──
 function uid(p){return p+'_'+(++ec).toString(36).padStart(5,'0')}
@@ -408,7 +475,7 @@ every edit is sent as a <code>com.eobase.&lt;op&gt;</code> event. the homeserver
 <span class="chip" onclick="window._eo?.verify?.()">⟳ self-test</span> <span class="chip" onclick="window._eo?.pushLocal?.()">↑ push local</span><br><br>
 <b>multi-device:</b> sign in on another device with the same account to sync. <b>collaborate:</b> invite another matrix id from the invite menu.`
 :`<b>local only — not encrypted</b><br><br>
-data is stored in ${sm}${sm==='opfs'?' (gzip compressed)':''}. connect a matrix account to encrypt and sync.<br><br>
+data is stored in ${sm}${sm!=='memory'?' (gzip compressed)':''}. connect a matrix account to encrypt and sync.<br><br>
 <a href="https://servers.joinmatrix.org/" target="_blank">get a matrix account →</a>`}</div>`;}
 function synHL(j){return j.replace(/("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,m=>{if(/^"/.test(m)){if(/:$/.test(m))return`<span class="mk">${m}</span>`;return`<span class="ms">${m}</span>`;}return`<span class="mn">${m}</span>`;});}
 function showLinkM(){if(!selRec||!LS)return;let all=[];for(const[tid,tbl]of Object.entries(tables)){const tr=LS.rows[tid]||[];const tc=LS.columns[tid]||[];const fc=tc[0];
@@ -517,10 +584,12 @@ document.getElementById('arb').style.display='none';document.getElementById('scr
 document.getElementById('tname').textContent='—';document.getElementById('tmeta').textContent='';document.getElementById('ebadge').style.display='none';
 renderTL();renderRPT();renderRP();document.getElementById('stat-events').textContent='0';document.getElementById('stat-entities').textContent='0';
 document.getElementById('stat-fold').textContent='0ms';document.getElementById('stat-disk').textContent='0';
-// Actually clear storage
-if(sm==='opfs'){try{const w=await dbH.createWritable();await w.write(new Blob([]));await w.close();toast('✓ opfs cleared','ok');}catch(e){toast('✗ failed to clear opfs','err');}}
-else if(sm==='idb'){try{dbH.transaction('ev','readwrite').objectStore('ev').delete('log');toast('✓ idb cleared','ok');}catch(e){toast('✗ failed to clear idb','err');}}
-else toast('memory cleared','ok');}
+// Clear every backend we have open so wiped data can't come back from a fallback.
+const cleared=[];
+if(opfsH){try{const w=await opfsH.createWritable();await w.write(new Blob([]));await w.close();cleared.push('opfs');}catch(e){toast('✗ failed to clear opfs: '+(e?.message||e),'err');}}
+if(idbH){try{await new Promise((res,rej)=>{const tx=idbH.transaction('ev','readwrite');tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);tx.objectStore('ev').delete('log');});cleared.push('idb');}catch(e){toast('✗ failed to clear idb: '+(e?.message||e),'err');}}
+if(cleared.length)toast('✓ cleared '+cleared.join('+'),'ok');
+else if(!opfsH&&!idbH)toast('memory cleared','ok');}
 function esc(s){if(typeof s!=='string')return s;const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 
 // ── TUTORIAL ──
@@ -544,7 +613,7 @@ document.getElementById('tut-container').innerHTML=h;}function eTut(){document.g
 
 // ── INIT ──
 async function init(){await initS();renderRPT();if(!isMob()){sbV=true;document.getElementById('sidebar').classList.remove('collapsed');}
-if(EL.length===0){seed();toast('loaded sample data — wipe to start fresh','warn');}else{const s=fold(EL);const t=Object.keys(s.tables);if(t.length)selTable(t[0]);toast('✓ restored '+EL.length.toLocaleString()+' events from last session','ok');}}
+if(EL.length===0){seed();toast('loaded sample data — wipe to start fresh','warn');}else{const s=fold(EL);const t=Object.keys(s.tables);if(t.length)selTable(t[0]);}}
 function seed(){const t1=uid('tbl'),t2=uid('tbl');
 emit('INS',t1,{et:'table',name:'Contacts'},'',true);emit('INS',t2,{et:'table',name:'Projects'},'',true);
 const cc=[{n:'Name',t:'text'},{n:'Status',t:'select'},{n:'Email',t:'url'},{n:'Notes',t:'text'}];const ca=[];
@@ -571,7 +640,8 @@ window._eo_state={
     uStore();renderRP();},
   ingest(ev){if(EL.some(e=>e.id===ev.id))return false;EL.push(ev);ec=Math.max(ec,EL.length);
     uScrub();if(scrubPos===null){renderRP();reproject();}sav();return true;},
-  flush(){sav();},
+  get EL(){return EL;},
+  flush(){return flushNow();},
 };
 init();
 </script>
